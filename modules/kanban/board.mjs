@@ -5,4 +5,8 @@ export class KanbanBoard {
     this.verticalLists = new Map();
   }
 
+  addList(list){
+    
+  }
+
 }

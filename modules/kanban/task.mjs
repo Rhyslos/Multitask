@@ -1,9 +1,9 @@
 
 export class KanbanTask {
-  constructor(id, title, category, originListId) {
+  constructor(id, title, category, originListID) {
     this.id = id;
     this.title = title;
     this.originalCategory = category;
-    this.originListId = originListId;
+    this.originListID = originListID;
   }
 }

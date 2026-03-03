@@ -11,4 +11,10 @@ export class KanbanList {
   addTask(task) {
     this.tasks.set(task.id, task);
   }
+
+  removeTask(taskID){
+    const task = this.tasks.get(taskID);
+    this.tasks.delete(taskID);
+    return task;
+  }
 }

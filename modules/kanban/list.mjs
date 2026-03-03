@@ -7,4 +7,8 @@ export class KanbanList {
     this.direction = direction;
     this.tasks = new Map();
   }
+
+  addTask(task) {
+    this.tasks.set(task.id, task);
+  }
 }

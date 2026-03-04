@@ -12,3 +12,11 @@ function handleTaskDrop(taskID, targetListID){
     const targetListContainer = tool.locate('id', targetListID);
     targetListContainer.appendChild(taskElement);
 }
+
+function updateTaskUI(taskID, targetListID){
+    const taskElement = tool.locate('id', taskID);
+    const targetList = tool.locate('id', targetListID);
+
+    targetList.appendChild(taskElement);
+}
+

@@ -7,9 +7,9 @@ export class KanbanBoard {
   }
 
   addList(list){
-    if(list.direction === constant.boardAlignmentHorizontal){
+    if(list.direction === constant.boardAlignment.Horizontal){
       this.horizontalLists.set(list.id, list);
-    }else if(list.direction === constant.boardAlignmentVertical){
+    }else if(list.direction === constant.boardAlignment.Vertical){
       this.verticalLists.set(list.id, list);
     }
   }

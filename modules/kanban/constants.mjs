@@ -1,3 +1,5 @@
 
-export const boardAlignmentHorizontal = 'horizontal'
-export const boardAlignmentVertical   = 'vertical'
+export const boardAlignment = Object.freeze({
+    Horizontal: 'horizontal',
+    Vertical:   'vertical',
+});

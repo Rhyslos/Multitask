@@ -17,4 +17,11 @@ export class KanbanList {
     this.tasks.delete(taskID);
     return task;
   }
+
+  getDefaultTaskCategory(task){
+    if(task.originListID === this.id){
+      return this.category;
+    }
+    return task.originalCategory;
+  }
 }

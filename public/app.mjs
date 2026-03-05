@@ -4,7 +4,7 @@ import { KanbanBoard } from "../modules/kanban/board.mjs";
 const board = new KanbanBoard();
 
 function handleTaskDrop(taskID, targetListID){
-    const taskElement   = tool.locate('class', taskID);
+    const taskElement   = tool.locate('id', taskID);
     const sourceListID  = taskElement.parentElement.id;
 
     board.moveTask(taskID, sourceListID, targetListID);
@@ -15,7 +15,7 @@ function handleTaskDrop(taskID, targetListID){
 
 function updateTaskUI(taskID, targetListID){
     const taskElement = tool.locate('id', taskID);
-    const targetList = tool.locate('id', targetListID);
+    const targetList  = tool.locate('id', targetListID);
 
     targetList.appendChild(taskElement);
 }

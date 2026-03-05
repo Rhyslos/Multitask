@@ -1,5 +1,4 @@
 import express from 'express';
-import apiRoutes from './api/routes.mjs';
 
 // Server initialization functions
 const app = express();

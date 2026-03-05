@@ -4,9 +4,19 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Multitask App for Students</title>
+    <link rel="stylesheet" href="/css/board.css">
 </head>
 <body>
-    <h1>Hello World!</h1>
-    <img src="https://i0.wp.com/pcapolity.com/wp-content/uploads/2023/08/Theoden.jpg?w=936&ssl=1" alt="King Theoden: So it begins">
+    <nav id="main-app-nav" class="app-navbar">
+        <div class="app-logo">StudentOS</div>
+        <div class="app-nav-links">
+            <button class="nav-item active">Board</button>
+            <button class="nav-item">Notes</button>
+        </div>
+    </nav>
+
+    <div id="app-root"></div>
+    
+    <script type="module" src="/app.mjs"></script>
 </body>
 </html>

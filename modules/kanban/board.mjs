@@ -20,4 +20,16 @@ export class KanbanBoard {
     return this.horizontalLists.get(listID) || this.verticalLists.get(listID);
   }
 
+  moveTask(taskID, sourceListID, targetListID){
+    const sourceList = this.getList(sourceListID);
+    const targetList = this.getList(targetListID);
+
+    if(sourceList && targetList){
+      const task = sourceList.removeTask(taskID);
+      if(task){
+        targetList.addTask(task);
+      }
+    }
+  }
+
 }

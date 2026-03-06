@@ -1,10 +1,10 @@
-/* global reset styles */
+/* Global reset styles */
 * {
     box-sizing: border-box;
     margin: 0;
 }
 
-/* layout styles */
+/* Layout styles */
 .kanban-grid {
     display: flex;
     flex-direction: column;
@@ -43,7 +43,7 @@
     flex-grow: 1; 
 }
 
-/* component styles */
+/* Component styles */
 .app-logo {
     font-size: 1.2rem;
     font-weight: bold;
@@ -171,19 +171,30 @@
 
 .task-content {
     padding: 12px;
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    column-gap: 10px;
+    row-gap: 5px;
+}
+
+.task-complete-checkbox {
+    grid-row: 1 / 3;
+    margin-top: 3px;
+    cursor: pointer;
+    width: 16px;
+    height: 16px;
+    accent-color: #2196F3;
 }
 
 .task-title {
+    grid-column: 2;
     font-size: 1rem;
     font-weight: bold;
-    margin-bottom: 5px;
     outline: none;
 }
 
 .task-category {
+    grid-column: 2;
     font-size: 0.8rem;
     color: #aaa;
 }
@@ -205,7 +216,109 @@
     border-color: #fff;
 }
 
-/* state styles */
+/* Modal styles */
+#task-modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 1000;
+    backdrop-filter: blur(2px);
+}
+
+.modal-content {
+    background: #383838;
+    color: #ffffff;
+    margin: 8% auto;
+    padding: 24px;
+    width: 90%;
+    max-width: 500px;
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+#modal-title-input {
+    width: 100%;
+    font-size: 1.5em;
+    font-weight: 600;
+    background: transparent;
+    color: #ffffff;
+    border: none;
+    border-bottom: 2px solid #555;
+    padding-bottom: 8px;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+#modal-title-input:focus {
+    border-color: #2196F3;
+}
+
+#modal-desc-input {
+    width: 100%;
+    min-height: 120px;
+    padding: 12px;
+    background: #2b2b2b;
+    color: #ffffff;
+    border: 1px solid #555;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 14px;
+    resize: vertical;
+    outline: none;
+}
+
+#modal-desc-input:focus {
+    border-color: #2196F3;
+}
+
+.modal-checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    color: #ccc;
+    cursor: pointer;
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 8px;
+}
+
+.modal-actions button {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 6px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+#save-modal-btn {
+    background-color: #2196F3;
+    color: white;
+}
+
+#save-modal-btn:hover {
+    background-color: #1976D2;
+}
+
+#close-modal-btn {
+    background-color: #555;
+    color: #ffffff;
+}
+
+#close-modal-btn:hover {
+    background-color: #777;
+}
+
+/* State styles */
 .kanban-task:active {
     cursor: grabbing;
 }
@@ -215,7 +328,7 @@
     transform: scale(0.98);
 }
 
-/* input styles */
+/* Input styles */
 [contenteditable="true"] {
     cursor: text;
     border-radius: 4px;

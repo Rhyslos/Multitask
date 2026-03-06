@@ -1,0 +1,42 @@
+<div id="board-container" class="kanban-grid">
+    <div id="tab-navbar" class="top-nav">
+    </div>
+    <div id="lists-container" class="vertical-lists-area">
+    </div>
+</div>
+
+<template id="column-header-template">
+    <div class="column-header">
+        <h2 class="list-title"></h2>
+    </div>
+</template>
+
+<template id="add-column-button-template">
+    <button class="add-list-btn" title="Add new vertical list">+</button>
+</template>
+
+<template id="vertical-list-template">
+    <div class="kanban-list vertical-flow">
+        <div class="list-header">
+            <h3 class="list-title-text" contenteditable="true">New List</h3>
+        </div>
+        <div class="task-container"></div>
+        <button class="add-task-btn">+ Add Task</button>
+    </div>
+</template>
+
+<template id="task-template">
+    <div class="kanban-task" draggable="true">
+        <div class="task-banner"></div>
+        <div class="task-content">
+            <div class="task-title" contenteditable="true">New Task</div>
+            <div class="task-category">General</div>
+        </div>
+    </div>
+</template>
+
+<template id="ghost-list-template">
+    <div class="ghost-list">
+        <span>+ Drop to create list</span>
+    </div>
+</template>

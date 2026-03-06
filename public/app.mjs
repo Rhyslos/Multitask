@@ -22,6 +22,7 @@ async function loadBoardView() {
         if(appRoot) {
             appRoot.innerHTML = htmlText;
             renderAddColumnButton();
+            renderTaskModal();
             bindBoardEvents();
         }
     } catch (error) {
@@ -114,6 +115,8 @@ function spawnNewTask(listID) {
         // Event binding functions
         newestTaskElement.addEventListener('dragstart', handleDragStart);
         newestTaskElement.addEventListener('dragend', handleDragEnd);
+
+        newestTaskElement.addEventListener('click', handleTaskInteraction);
     }
 }
 
@@ -244,6 +247,108 @@ function handleTaskDrop(taskID, targetListID){
         const targetListContainer = tool.locate('id', targetListID);
         const taskContainer = tool.locate('class', 'task-container', targetListContainer);
         taskContainer.appendChild(taskElement);
+    }
+}
+
+// State management functions
+let activeEditTaskID = null;
+
+// Modal initialization functions
+function renderTaskModal() {
+    const appRoot = tool.locate('id', 'app-root');
+    const template = tool.locate('id', 'task-modal-template');
+    
+    if (appRoot && template) {
+        const clone = template.content.cloneNode(true);
+        appRoot.appendChild(clone);
+        
+        const closeBtn = tool.locate('id', 'close-modal-btn');
+        const saveBtn = tool.locate('id', 'save-modal-btn');
+        
+        if (closeBtn) closeBtn.addEventListener('click', hideTaskModal);
+        if (saveBtn) saveBtn.addEventListener('click', saveTaskModal);
+    }
+}
+
+// UI logic functions
+function showTaskModal(taskID) {
+    activeEditTaskID = taskID;
+    const taskData = fetchTaskFromBoard(taskID);
+    
+    if (taskData) {
+        const modal = tool.locate('id', 'task-modal-overlay');
+        const titleInput = tool.locate('id', 'modal-title-input');
+        const descInput = tool.locate('id', 'modal-desc-input');
+        const compCheckbox = tool.locate('id', 'modal-comp-checkbox');
+        
+        titleInput.value = taskData.title;
+        descInput.value = taskData.description;
+        compCheckbox.checked = taskData.isCompleted;
+        
+        modal.style.display = 'block';
+    }
+}
+
+function hideTaskModal() {
+    const modal = tool.locate('id', 'task-modal-overlay');
+    modal.style.display = 'none';
+    activeEditTaskID = null;
+}
+
+function saveTaskModal() {
+    if (activeEditTaskID) {
+        const taskData = fetchTaskFromBoard(activeEditTaskID);
+        const titleInput = tool.locate('id', 'modal-title-input');
+        const descInput = tool.locate('id', 'modal-desc-input');
+        const compCheckbox = tool.locate('id', 'modal-comp-checkbox');
+        
+        taskData.title = titleInput.value;
+        taskData.description = descInput.value;
+        taskData.isCompleted = compCheckbox.checked;
+        
+        syncTaskUI(activeEditTaskID, taskData);
+        hideTaskModal();
+    }
+}
+
+function syncTaskUI(taskID, taskData) {
+    const taskElement = tool.locate('id', taskID);
+    
+    if (taskElement) {
+        const titleEl = tool.locate('class', 'task-title', taskElement);
+        const checkboxEl = tool.locate('class', 'task-complete-checkbox', taskElement);
+        
+        if (titleEl) titleEl.textContent = taskData.title;
+        if (checkboxEl) checkboxEl.checked = taskData.isCompleted;
+    }
+}
+
+// Data retrieval functions
+function fetchTaskFromBoard(taskID) {
+    for (let list of board.verticalLists.values()) {
+        if (list.tasks.has(taskID)) return list.tasks.get(taskID);
+    }
+    for (let list of board.horizontalLists.values()) {
+        if (list.tasks.has(taskID)) return list.tasks.get(taskID);
+    }
+    return null;
+}
+
+// Event handling functions
+function handleTaskInteraction(event) {
+    const target = event.target;
+    const taskElement = target.closest('.kanban-task');
+    
+    if (!taskElement) return;
+
+    if (target.classList.contains('task-complete-checkbox')) {
+        const taskData = fetchTaskFromBoard(taskElement.id);
+        if (taskData) {
+            taskData.isCompleted = target.checked;
+            syncTaskUI(taskElement.id, taskData);
+        }
+    } else {
+        showTaskModal(taskElement.id);
     }
 }
 

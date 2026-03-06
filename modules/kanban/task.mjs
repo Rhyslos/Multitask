@@ -5,5 +5,7 @@ export class KanbanTask {
     this.title = title;
     this.originalCategory = category;
     this.originListID = originListID;
+    this.description = "";
+    this.isCompleted = false;
   }
 }

@@ -161,6 +161,7 @@ function bindNewButtonEvent(navbar) {
     }
 }
 
+// Event binding functions
 function bindBoardEvents() {
     const boardContainer = tool.locate('id', 'board-container');
     if (boardContainer) {
@@ -168,6 +169,7 @@ function bindBoardEvents() {
         boardContainer.addEventListener('drop', handleDrop);
         boardContainer.addEventListener('keydown', handleTextEditKeydown);
         boardContainer.addEventListener('focusout', handleTextEditBlur);
+        boardContainer.addEventListener('mousedown', handleEditableMousedown);
     }
 }
 
@@ -195,9 +197,27 @@ function handleTextEditKeydown(event) {
     }
 }
 
+// Event handling functions
+function handleEditableMousedown(event) {
+    const target = event.target;
+    if (target.getAttribute('contenteditable') === 'true') {
+        const taskParent = target.closest('.kanban-task');
+        if (taskParent) {
+            taskParent.setAttribute('draggable', 'false');
+        }
+        // Force focus so the cursor appears immediately
+        setTimeout(() => target.focus(), 0); 
+    }
+}
+
 function handleTextEditBlur(event) {
     const target = event.target;
     if (target.getAttribute('contenteditable') === 'true') {
+        const taskParent = target.closest('.kanban-task');
+        if (taskParent) {
+            taskParent.setAttribute('draggable', 'true');
+        }
+
         const text = target.textContent.trim();
         
         if (text === '') {
@@ -373,6 +393,8 @@ function handleTaskInteraction(event) {
             taskData.isCompleted = target.checked;
             syncTaskUI(taskElement.id, taskData);
         }
+    } else if (target.classList.contains('task-title')) {
+        return;
     } else {
         showTaskModal(taskElement.id);
     }

@@ -166,6 +166,8 @@ function bindBoardEvents() {
     if (boardContainer) {
         boardContainer.addEventListener('dragover', handleDragOver);
         boardContainer.addEventListener('drop', handleDrop);
+        boardContainer.addEventListener('keydown', handleTextEditKeydown);
+        boardContainer.addEventListener('focusout', handleTextEditBlur);
     }
 }
 
@@ -183,6 +185,30 @@ function handleAddColumnClick(event) {
     // UI logic functions
     if (buttonIndex === buttons.length - 1) {
         renderAddColumnButton();
+    }
+}
+
+function handleTextEditKeydown(event) {
+    if (event.key === 'Enter' && event.target.getAttribute('contenteditable') === 'true') {
+        event.preventDefault();
+        event.target.blur();
+    }
+}
+
+function handleTextEditBlur(event) {
+    const target = event.target;
+    if (target.getAttribute('contenteditable') === 'true') {
+        const text = target.textContent.trim();
+        
+        if (text === '') {
+            if (target.classList.contains('list-title-text')) {
+                target.textContent = 'New List';
+            } else if (target.classList.contains('task-title')) {
+                target.textContent = 'New Task';
+            }
+        }
+        
+        syncTextToModel(target);
     }
 }
 
@@ -349,6 +375,26 @@ function handleTaskInteraction(event) {
         }
     } else {
         showTaskModal(taskElement.id);
+    }
+}
+
+// Data logic functions
+function syncTextToModel(target) {
+    const text = target.textContent.trim();
+    
+    if (target.classList.contains('list-title-text')) {
+        const listElement = target.closest('.kanban-list');
+        if (listElement && board.getList(listElement.id)) {
+            board.getList(listElement.id).name = text;
+        }
+    } else if (target.classList.contains('task-title')) {
+        const taskElement = target.closest('.kanban-task');
+        if (taskElement) {
+            const taskData = fetchTaskFromBoard(taskElement.id);
+            if (taskData) {
+                taskData.title = text;
+            }
+        }
     }
 }
 

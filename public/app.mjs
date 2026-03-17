@@ -205,7 +205,6 @@ function handleEditableMousedown(event) {
         if (taskParent) {
             taskParent.setAttribute('draggable', 'false');
         }
-        // Force focus so the cursor appears immediately
         setTimeout(() => target.focus(), 0); 
     }
 }

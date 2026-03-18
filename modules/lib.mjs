@@ -23,3 +23,12 @@ export function locateAll(type, identifier, parent = document){
             return[];
     }
 }
+
+// API helper functions
+export function catchAsync(fn) {
+    return function (req, res, next) {
+        Promise.resolve(fn(req, res, next)).catch((err) => {
+            res.status(500).json({ error: err.message });
+        });
+    };
+}

@@ -1,23 +1,24 @@
 import sqlite3 from 'sqlite3';
 import { open } from 'sqlite';
 
-// database initialization functions
+// Database initialization
 export async function initializeDatabase() {
     
-    // database connection functions
+    // Connection
     const db = await open({
-        filename: './kanban.db',
+        filename: './database/kanban.db',
         driver: sqlite3.Database
     });
 
-    // database configuration functions
+    // Configuration
     await db.exec('PRAGMA foreign_keys = ON;');
 
-    // database schema functions
+    // Schema
     await db.exec(`
         CREATE TABLE IF NOT EXISTS users (
             id TEXT PRIMARY KEY,
             username TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
             createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
         );
 

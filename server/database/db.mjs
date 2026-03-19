@@ -6,7 +6,7 @@ export async function initializeDatabase() {
 
     // Connection
     const db = await open({
-        filename: './database/kanban.db',
+        filename: './database/multitask.db',
         driver: sqlite3.Database
     });
 
@@ -44,7 +44,9 @@ export async function initializeDatabase() {
             id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
             category TEXT,
+            color TEXT,
             direction TEXT,
+            columnIndex INTEGER NOT NULL DEFAULT 0,
             workspaceID TEXT NOT NULL,
             FOREIGN KEY (workspaceID) REFERENCES workspaces (id) ON DELETE CASCADE
         );
@@ -55,8 +57,18 @@ export async function initializeDatabase() {
             description TEXT,
             isCompleted BOOLEAN,
             originalCategory TEXT,
+            color TEXT,
             listID TEXT NOT NULL,
+            taskOrder INTEGER NOT NULL DEFAULT 0,
             FOREIGN KEY (listID) REFERENCES lists (id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS notes (
+            id TEXT PRIMARY KEY,
+            content TEXT NOT NULL DEFAULT '{}',
+            workspaceID TEXT UNIQUE NOT NULL,
+            updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (workspaceID) REFERENCES workspaces (id) ON DELETE CASCADE
         );
     `);
 

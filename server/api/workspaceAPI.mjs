@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { catchAsync } from './apiUtils.mjs';
+import crypto from 'crypto';
 
 // Routes
 export default function createWorkspaceRouter(db) {

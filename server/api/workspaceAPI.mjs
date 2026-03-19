@@ -1,34 +1,102 @@
-import express from 'express';
+import { Router } from 'express';
 import { catchAsync } from './apiUtils.mjs';
 
-// Router initialization functions
+// Routes
 export default function createWorkspaceRouter(db) {
-    const router = express.Router();
+    const router = Router();
 
-    router.get('/user/:userId', catchAsync(async (req, res) => {
-        const { userId } = req.params;
-        const workspaces = await db.all('SELECT * FROM workspaces WHERE userID = ?', [userId]);
-        
-        res.json({ workspaces });
+
+    // Workspace routes
+    router.get('/', catchAsync(async (req, res) => {
+        const { userID } = req.query;
+        if (!userID)
+            return res.status(400).json({ error: 'userID is required.' });
+
+        const workspaces = await db.all(`
+            SELECT w.*, c.name as categoryName, c.color as categoryColor
+            FROM workspaces w
+            LEFT JOIN categories c ON w.categoryID = c.id
+            WHERE w.userID = ?
+            ORDER BY w.createdAt DESC
+        `, userID);
+
+        return res.json({ workspaces });
     }));
 
     router.post('/', catchAsync(async (req, res) => {
-        const { id, name, userID } = req.body;
-        
+        const { name, userID, categoryID } = req.body;
+        if (!name || !userID)
+            return res.status(400).json({ error: 'Name and userID are required.' });
+
+        const id = crypto.randomUUID();
         await db.run(
-            'INSERT INTO workspaces (id, name, userID) VALUES (?, ?, ?)',
-            [id, name, userID]
+            'INSERT INTO workspaces (id, name, userID, categoryID) VALUES (?, ?, ?, ?)',
+            id, name, userID, categoryID || null
         );
-        
-        res.status(201).json({ message: "Workspace created successfully" });
+
+        const workspace = await db.get(`
+            SELECT w.*, c.name as categoryName, c.color as categoryColor
+            FROM workspaces w
+            LEFT JOIN categories c ON w.categoryID = c.id
+            WHERE w.id = ?
+        `, id);
+
+        return res.status(201).json({ workspace });
     }));
 
-    router.delete('/:workspaceId', catchAsync(async (req, res) => {
-        const { workspaceId } = req.params;
-        
-        await db.run('DELETE FROM workspaces WHERE id = ?', [workspaceId]);
-        
-        res.json({ message: "Workspace deleted successfully" });
+    router.delete('/:id', catchAsync(async (req, res) => {
+        await db.run('DELETE FROM workspaces WHERE id = ?', req.params.id);
+        return res.json({ message: 'Workspace deleted.' });
+    }));
+
+    router.patch('/:id', catchAsync(async (req, res) => {
+        const { name, categoryID } = req.body;
+        await db.run(
+            'UPDATE workspaces SET name = ?, categoryID = ? WHERE id = ?',
+            name, categoryID || null, req.params.id
+        );
+
+        const workspace = await db.get(`
+            SELECT w.*, c.name as categoryName, c.color as categoryColor
+            FROM workspaces w
+            LEFT JOIN categories c ON w.categoryID = c.id
+            WHERE w.id = ?
+        `, req.params.id);
+
+        return res.json({ workspace });
+    }));
+
+
+    // Category routes
+    router.get('/categories', catchAsync(async (req, res) => {
+        const { userID } = req.query;
+        if (!userID)
+            return res.status(400).json({ error: 'userID is required.' });
+
+        const categories = await db.all(
+            'SELECT * FROM categories WHERE userID = ? ORDER BY name ASC',
+            userID
+        );
+        return res.json({ categories });
+    }));
+
+    router.post('/categories', catchAsync(async (req, res) => {
+        const { name, color, userID } = req.body;
+        if (!name || !color || !userID)
+            return res.status(400).json({ error: 'Name, color and userID are required.' });
+
+        const id = crypto.randomUUID();
+        await db.run(
+            'INSERT INTO categories (id, name, color, userID) VALUES (?, ?, ?, ?)',
+            id, name, color, userID
+        );
+
+        return res.status(201).json({ category: { id, name, color, userID } });
+    }));
+
+    router.delete('/categories/:id', catchAsync(async (req, res) => {
+        await db.run('DELETE FROM categories WHERE id = ?', req.params.id);
+        return res.json({ message: 'Category deleted.' });
     }));
 
     return router;

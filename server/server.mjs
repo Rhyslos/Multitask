@@ -1,12 +1,12 @@
 import express from 'express';
 import cors from 'cors';
-import crypto from 'crypto';
 
 // Import functions
 import { initializeDatabase } from './database/db.mjs';
 import createKanbanRouter from './api/kanbanAPI.mjs';
 import createWorkspaceRouter from './api/workspaceAPI.mjs';
 import createUserRouter from './api/userAPI.mjs';
+import createNotesRouter from './api/notesAPI.mjs';
 
 export class KanbanServer {
     // Initialization
@@ -21,11 +21,12 @@ export class KanbanServer {
         this.db = await initializeDatabase();
 
         this.app.use(cors({ origin: 'http://localhost:5173' }));
-        this.app.use(express.json());
+        this.app.use(express.json({ limit: '10mb' }));
 
         this.app.use('/api/kanban', createKanbanRouter(this.db));
         this.app.use('/api/users', createUserRouter(this.db));
         this.app.use('/api/workspaces', createWorkspaceRouter(this.db));
+        this.app.use('/api/notes', createNotesRouter(this.db));
     }
 
     // Execution

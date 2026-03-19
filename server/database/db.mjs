@@ -3,7 +3,7 @@ import { open } from 'sqlite';
 
 // Database initialization
 export async function initializeDatabase() {
-    
+
     // Connection
     const db = await open({
         filename: './database/kanban.db',
@@ -22,12 +22,22 @@ export async function initializeDatabase() {
             createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
         );
 
+        CREATE TABLE IF NOT EXISTS categories (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            color TEXT NOT NULL,
+            userID TEXT NOT NULL,
+            FOREIGN KEY (userID) REFERENCES users (id) ON DELETE CASCADE
+        );
+
         CREATE TABLE IF NOT EXISTS workspaces (
             id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
             userID TEXT NOT NULL,
+            categoryID TEXT,
             createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (userID) REFERENCES users (id) ON DELETE CASCADE
+            FOREIGN KEY (userID) REFERENCES users (id) ON DELETE CASCADE,
+            FOREIGN KEY (categoryID) REFERENCES categories (id) ON DELETE SET NULL
         );
 
         CREATE TABLE IF NOT EXISTS lists (

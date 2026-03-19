@@ -1,11 +1,12 @@
 import express from 'express';
 import cors from 'cors';
+import crypto from 'crypto';
 
 // Import functions
 import { initializeDatabase } from './database/db.mjs';
 import createKanbanRouter from './api/kanbanAPI.mjs';
 import createWorkspaceRouter from './api/workspaceAPI.mjs';
-import createUserRouter from './api/userApi.mjs';
+import createUserRouter from './api/userAPI.mjs';
 
 export class KanbanServer {
     // Initialization

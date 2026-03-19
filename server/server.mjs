@@ -1,21 +1,25 @@
 import express from 'express';
+import cors from 'cors';
 
 // Import functions
 import { initializeDatabase } from './database/db.mjs';
 import createKanbanRouter from './api/kanbanAPI.mjs';
 import createWorkspaceRouter from './api/workspaceAPI.mjs';
+import createUserRouter from './api/userApi.mjs';
 
 export class KanbanServer {
-    // Initialization functions
+    // Initialization
     constructor() {
         this.app = express();
         this.port = process.env.PORT || 8080;
         this.db = null;
     }
 
-    // Setup functions
+    // Setup
     async initialize() {
         this.db = await initializeDatabase();
+
+        this.app.use(cors({ origin: 'http://localhost:5173' }));
         this.app.use(express.json());
 
         this.app.use('/api/kanban', createKanbanRouter(this.db));
@@ -23,7 +27,7 @@ export class KanbanServer {
         this.app.use('/api/workspaces', createWorkspaceRouter(this.db));
     }
 
-    // Execution functions
+    // Execution
     start() {
         this.app.listen(this.port, () => {
             console.log(`Backend server running on http://localhost:${this.port}`);
@@ -31,7 +35,7 @@ export class KanbanServer {
     }
 }
 
-// Execution functions
+// Entry
 async function run() {
     const server = new KanbanServer();
     await server.initialize();

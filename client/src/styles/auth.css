@@ -87,7 +87,7 @@
 }
 
 .auth-brand-name {
-    font-family: 'DM Serif Display', serif;
+    font-family: 'Noto Sans', serif;
     font-size: 16px;
     color: var(--ink);
     letter-spacing: 0.02em;
@@ -100,7 +100,7 @@
 }
 
 .auth-title {
-    font-family: 'DM Serif Display', serif;
+    font-family: 'Noto Sans', serif;
     font-size: 32px;
     color: var(--ink);
     margin: 0 0 6px;
@@ -142,7 +142,7 @@
     border: 1.5px solid var(--border);
     border-radius: 10px;
     background: white;
-    font-family: 'DM Sans', sans-serif;
+    font-family: 'Noto Sans', sans-serif;
     font-size: 15px;
     color: var(--ink);
     transition: border-color 0.15s, box-shadow 0.15s;
@@ -181,7 +181,7 @@
     color: white;
     border: none;
     border-radius: 10px;
-    font-family: 'DM Sans', sans-serif;
+    font-family: 'Noto Sans', sans-serif;
     font-size: 15px;
     font-weight: 500;
     cursor: pointer;

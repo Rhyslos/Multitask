@@ -2,7 +2,7 @@ import express from 'express';
 import { initializeDatabase } from './modules/database/db.mjs';
 import createKanbanRouter from './api/kanbanAPI.mjs';
 
-export class KanbanServer {
+export class MultitaskServer {
     constructor() {
         // Server initialization functions
         this.app = express();
@@ -42,7 +42,7 @@ export class KanbanServer {
 
 // App execution functions
 async function run() {
-    const server = new KanbanServer();
+    const server = new MultitaskServer();
     await server.initialize();
     server.start();
 }

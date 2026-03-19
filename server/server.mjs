@@ -1,6 +1,6 @@
 import express from 'express';
 import { initializeDatabase } from './modules/database/db.mjs';
-import createKanbanRouter from './api/kanbanAPI.mjs';
+import createKanbanRouter from '../api/kanbanAPI.mjs';
 
 export class MultitaskServer {
     constructor() {

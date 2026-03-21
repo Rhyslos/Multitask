@@ -36,7 +36,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: border-color 0.15s, color 0.15s, background 0.15s;
+    transition: border-color 0.15s, color 0.15s, background 0.15s, transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
     flex-shrink: 0;
 }
 
@@ -49,14 +49,13 @@
 
 /* Board */
 .kanban-board {
-    display: flex;
-    flex-direction: row;
-    gap: 16px;
-    padding: 24px;
-    padding-bottom: 48px;
+    position: relative;
     overflow-x: auto;
+    overflow-y: auto;
     flex: 1;
-    align-items: flex-start;
+    padding: 24px;
+    padding-bottom: 32px;
+    scrollbar-width: thin;
     scrollbar-color: rgba(15, 14, 13, 0.2) transparent;
 }
 
@@ -83,11 +82,14 @@
 
 /* Column */
 .kanban-column {
+    position: absolute;
+    top: 24px;
+    left: calc(var(--col) * (300px + 16px) + 24px);
     display: flex;
     flex-direction: column;
     gap: 16px;
     width: 300px;
-    flex-shrink: 0;
+    transition: left 0.4s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 

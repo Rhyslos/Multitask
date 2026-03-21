@@ -4,6 +4,7 @@ import { useKanban } from '../hooks/useKanban';
 import { useWorkspaces } from '../hooks/useWorkspaces';
 import { useAuth } from '../hooks/useAuth';
 import { useDragDrop } from '../hooks/useDragDrop';
+import { useFlipAnimation } from '../hooks/useFlipAnimation';
 import Navbar from '../components/Navbar';
 import Subbar from '../components/Subbar';
 import KanbanColumn from '../components/kanban/KanbanColumn';
@@ -16,7 +17,7 @@ export default function Kanban() {
     const { workspaceID } = useParams();
     const { user } = useAuth();
     const { categories } = useWorkspaces(user?.id);
-    const { lists, tasks, loading, addList, updateList, deleteList, addTask, updateTask, deleteTask, reorderTasks } = useKanban(workspaceID);
+    const { lists, tasks, loading, removingIds, addList, updateList, deleteList, addTask, updateTask, deleteTask, reorderTasks, getColumnId } = useKanban(workspaceID);
 
     const [activeTask, setActiveTask] = useState(null);
     const [focusedListId, setFocusedListId] = useState(null);
@@ -25,7 +26,20 @@ export default function Kanban() {
     const boardRef = useRef(null);
     const columnCountRef = useRef(0);
 
-    const { dragging, clone, tilt, insertionPoint, registerList, registerTask, registerGhost, startDrag } = useDragDrop({
+    const { registerElement: registerTaskElement } = useFlipAnimation(tasks);
+    const { registerElement: registerListElement } = useFlipAnimation(lists);
+
+    const {
+        dragging,
+        cloneMeta,
+        insertionPoint,
+        registerList,
+        registerTask,
+        registerGhost,
+        registerCloneOuter,
+        registerCloneInner,
+        startDrag,
+    } = useDragDrop({
         tasks,
         onReorder: reorderTasks,
         onGhostDrop: async (key, task) => {
@@ -49,6 +63,7 @@ export default function Kanban() {
     });
 
     const isDragging = !!dragging;
+    const draggingTask = tasks.find(t => t.id === dragging);
 
     const columnCount = lists.length > 0
         ? Math.max(...lists.map(l => l.columnIndex)) + 1
@@ -73,7 +88,7 @@ export default function Kanban() {
         }
     }
 
-    const draggingTask = tasks.find(t => t.id === dragging);
+    const boardInnerWidth = (columnCount * (300 + 16)) + 24 + (isDragging ? 316 : 0);
 
     return (
         <div className="kanban-root">
@@ -93,58 +108,71 @@ export default function Kanban() {
             </div>
 
             <div className="kanban-board" ref={boardRef} onScroll={handleBoardScroll}>
-                {Array.from({ length: columnCount }).map((_, colIndex) => (
-                    <KanbanColumn
-                        key={colIndex}
-                        colIndex={colIndex}
-                        lists={getListsInColumn(colIndex)}
-                        tasks={tasks}
-                        categories={categories}
-                        focusedListId={focusedListId}
-                        dragging={dragging}
-                        insertionPoint={insertionPoint}
-                        isDragging={isDragging}
-                        onUpdateList={updateList}
-                        onDeleteList={deleteList}
-                        onAddTask={addTask}
-                        onUpdateTask={updateTask}
-                        onDeleteTask={deleteTask}
-                        onStartDrag={startDrag}
-                        onOpenTask={setActiveTask}
-                        onFocusClear={() => setFocusedListId(null)}
-                        registerList={registerList}
-                        registerTask={registerTask}
-                        registerGhost={registerGhost}
-                    />
-                ))}
+                <div style={{
+                    position: 'relative',
+                    width: boardInnerWidth,
+                    minHeight: '100%',
+                }}>
+                    {[...new Set(lists.map(l => l.columnIndex))].sort((a, b) => a - b).map((colIndex) => (
+                        <KanbanColumn
+                            key={getColumnId(colIndex)}
+                            colIndex={colIndex}
+                            lists={getListsInColumn(colIndex)}
+                            tasks={tasks}
+                            categories={categories}
+                            focusedListId={focusedListId}
+                            dragging={dragging}
+                            insertionPoint={insertionPoint}
+                            isDragging={isDragging}
+                            onUpdateList={updateList}
+                            onDeleteList={(listId) => deleteList(listId)}
+                            onAddTask={addTask}
+                            onUpdateTask={updateTask}
+                            onDeleteTask={deleteTask}
+                            onStartDrag={startDrag}
+                            onOpenTask={setActiveTask}
+                            onFocusClear={() => setFocusedListId(null)}
+                            registerList={registerList}
+                            registerTask={registerTask}
+                            registerGhost={registerGhost}
+                            registerTaskElement={registerTaskElement}
+                            registerListElement={registerListElement}
+                            removingIds={removingIds}
+                        />
+                    ))}
 
-                {isDragging && (
-                    <div
-                        className="kanban-ghost-column"
-                        ref={el => registerGhost('new-column', el)}
-                    >
-                        <span>+ New column</span>
-                    </div>
-                )}
+                    {isDragging && (
+                        <div
+                            className="kanban-ghost-column"
+                            ref={el => registerGhost('new-column', el)}
+                            style={{
+                                position: 'absolute',
+                                top: 24,
+                                left: columnCount * (300 + 16) + 24,
+                            }}
+                        >
+                            <span>+ New column</span>
+                        </div>
+                    )}
+                </div>
             </div>
 
-            {clone && draggingTask && (
+            {cloneMeta && draggingTask && (
                 <div
+                    ref={registerCloneOuter}
                     style={{
                         position: 'fixed',
                         left: 0,
                         top: 0,
-                        width: clone.width,
-                        transform: `translate(${clone.x}px, ${clone.y}px)`,
+                        width: cloneMeta.width,
                         pointerEvents: 'none',
                         zIndex: 1000,
+                        willChange: 'transform',
                     }}
                 >
                     <div
+                        ref={registerCloneInner}
                         className="kanban-drag-clone"
-                        style={{
-                            transform: `scale(1.08) rotate(${tilt}deg)`,
-                        }}
                     >
                         <KanbanTask
                             task={draggingTask}
@@ -156,6 +184,7 @@ export default function Kanban() {
                             onStartDrag={() => {}}
                             onOpen={() => {}}
                             registerTask={() => {}}
+                            registerElement={() => {}}
                         />
                     </div>
                 </div>

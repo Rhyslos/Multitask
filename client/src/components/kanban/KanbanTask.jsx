@@ -3,7 +3,7 @@ import CategoryDropdown from './CategoryDropdown';
 
 
 // Component
-export default function KanbanTask({ task, categories, dragging, isClone, onUpdate, onDelete, onStartDrag, onOpen, registerTask }) {
+export default function KanbanTask({ task, categories, dragging, isClone, onUpdate, onDelete, onStartDrag, onOpen, registerTask, registerElement }) {
     const [showCatDropdown, setShowCatDropdown] = useState(false);
     const titleRef = useRef(null);
     const taskRef = useRef(null);
@@ -12,6 +12,13 @@ export default function KanbanTask({ task, categories, dragging, isClone, onUpda
         if (registerTask) {
             registerTask(task.id, taskRef.current);
             return () => registerTask(task.id, null);
+        }
+    }, [task.id]);
+
+    useEffect(() => {
+        if (registerElement && !isClone) {
+            registerElement(task.id, taskRef.current);
+            return () => registerElement(task.id, null);
         }
     }, [task.id]);
 

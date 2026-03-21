@@ -2,10 +2,12 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useWorkspaces } from '../hooks/useWorkspaces';
+import { useAnimatedRemoval } from '../hooks/useAnimatedRemoval';
 import Navbar from '../components/Navbar';
 import Subbar from '../components/Subbar';
-import WorkspaceGrid from '../components/WorkspaceGrid';
+import CategoryFilter from '../components/CategoryFilter';
 import CreateWorkspaceModal from '../components/CreateWorkspaceModal';
+import AnimatedRemoval from '../components/AnimatedRemoval';
 
 
 // Page
@@ -17,6 +19,8 @@ export default function Dashboard() {
     const [modalOpen, setModalOpen] = useState(false);
     const [filterCategory, setFilterCategory] = useState(null);
     const [filterText, setFilterText] = useState('');
+
+    const { triggerRemoval, isRemoving } = useAnimatedRemoval(deleteWorkspace);
 
     const filtered = workspaces.filter(w => {
         const matchesCategory = !filterCategory || w.categoryID === filterCategory;
@@ -38,19 +42,54 @@ export default function Dashboard() {
             <Navbar />
             <Subbar />
             <main className="dashboard-main">
-                <WorkspaceGrid
-                    workspaces={filtered}
-                    categories={categories}
-                    loading={loading}
-                    filterCategory={filterCategory}
-                    filterText={filterText}
-                    onFilterCategory={setFilterCategory}
-                    onFilterText={setFilterText}
-                    onOpen={handleOpen}
-                    onDelete={deleteWorkspace}
-                    onCreateNew={() => setModalOpen(true)}
-                />
+                <div className="grid-root">
+                    <div className="grid-filters">
+                        <CategoryFilter
+                            categories={categories}
+                            selected={filterCategory}
+                            searchText={filterText}
+                            onSelect={setFilterCategory}
+                            onSearch={setFilterText}
+                        />
+                    </div>
+
+                    <div className="grid">
+                        <button className="workspace-ghost" onClick={() => setModalOpen(true)}>
+                            <span className="workspace-ghost-icon">+</span>
+                            <span className="workspace-ghost-label">New workspace</span>
+                        </button>
+
+                        {filtered.map(ws => (
+                            <AnimatedRemoval key={ws.id} removing={isRemoving(ws.id)}>
+                                <div
+                                    className="workspace-card"
+                                    onClick={() => handleOpen(ws.id)}
+                                >
+                                    {ws.categoryName && (
+                                        <span
+                                            className="workspace-card-tag"
+                                            style={{ background: ws.categoryColor + '22', color: ws.categoryColor }}
+                                        >
+                                            {ws.categoryName}
+                                        </span>
+                                    )}
+                                    <p className="workspace-card-name">{ws.name}</p>
+                                    <p className="workspace-card-date">
+                                        {new Date(ws.createdAt).toLocaleDateString()}
+                                    </p>
+                                    <button
+                                        className="workspace-card-delete"
+                                        onClick={e => { e.stopPropagation(); triggerRemoval(ws.id); }}
+                                    >
+                                        ✕
+                                    </button>
+                                </div>
+                            </AnimatedRemoval>
+                        ))}
+                    </div>
+                </div>
             </main>
+
             {modalOpen && (
                 <CreateWorkspaceModal
                     categories={categories}

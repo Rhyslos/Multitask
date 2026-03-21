@@ -6,7 +6,8 @@ import KanbanTask from './KanbanTask';
 export default function KanbanList({
     list, tasks, categories, isFocused, dragging, insertionPoint,
     onUpdate, onDelete, onAddTask, onUpdateTask, onDeleteTask,
-    onStartDrag, onOpenTask, onFocusClear, registerList, registerTask
+    onStartDrag, onOpenTask, onFocusClear, registerList, registerTask,
+    registerTaskElement, registerListElement
 }) {
     const nameRef = useRef(null);
     const listRef = useRef(null);
@@ -14,6 +15,13 @@ export default function KanbanList({
     useEffect(() => {
         registerList(list.id, listRef.current);
         return () => registerList(list.id, null);
+    }, [list.id]);
+
+    useEffect(() => {
+        if (registerListElement) {
+            registerListElement(list.id, listRef.current);
+            return () => registerListElement(list.id, null);
+        }
     }, [list.id]);
 
     useEffect(() => {
@@ -82,6 +90,7 @@ export default function KanbanList({
                             onStartDrag={onStartDrag}
                             onOpen={() => onOpenTask(task)}
                             registerTask={registerTask}
+                            registerElement={registerTaskElement}
                         />
                     </React.Fragment>
                 ))}

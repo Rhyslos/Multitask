@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 const API = 'http://localhost:8080/api';
 
@@ -8,6 +8,15 @@ export function useKanban(workspaceID) {
     const [lists, setLists] = useState([]);
     const [tasks, setTasks] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [removingIds, setRemovingIds] = useState(new Set());
+    const columnIds = useRef({});
+
+    function getColumnId(colIndex) {
+        if (!columnIds.current[colIndex]) {
+            columnIds.current[colIndex] = crypto.randomUUID();
+        }
+        return columnIds.current[colIndex];
+    }
 
     useEffect(() => {
         if (!workspaceID) return;
@@ -45,9 +54,44 @@ export function useKanban(workspaceID) {
     }
 
     async function deleteList(listId) {
-        setLists(prev => prev.filter(l => l.id !== listId));
-        setTasks(prev => prev.filter(t => t.listID !== listId));
+        const remainingLists = lists.filter(l => l.id !== listId);
+        const remainingColumns = [...new Set(remainingLists.map(l => l.columnIndex))].sort((a, b) => a - b);
+        const columnRemap = {};
+        remainingColumns.forEach((col, i) => { columnRemap[col] = i; });
+
+        const reorderedLists = remainingLists.map(l => ({
+            ...l,
+            columnIndex: columnRemap[l.columnIndex],
+        }));
+
+        setRemovingIds(prev => new Set([...prev, listId]));
+
         await fetch(`${API}/kanban/lists/${listId}`, { method: 'DELETE' });
+
+        setTimeout(() => {
+            const newColumnIds = {};
+            remainingColumns.forEach((oldCol, newIdx) => {
+                newColumnIds[newIdx] = columnIds.current[oldCol];
+            });
+            columnIds.current = newColumnIds;
+
+            setLists(reorderedLists);
+            setTasks(prev => prev.filter(t => t.listID !== listId));
+            setRemovingIds(prev => {
+                const next = new Set(prev);
+                next.delete(listId);
+                return next;
+            });
+
+            const updates = reorderedLists.map(l => ({ id: l.id, columnIndex: l.columnIndex }));
+            if (updates.length > 0) {
+                fetch(`${API}/kanban/lists/reorder`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ updates }),
+                });
+            }
+        }, 250);
     }
 
     async function addTask(listId) {
@@ -109,5 +153,5 @@ export function useKanban(workspaceID) {
         });
     }
 
-    return { lists, tasks, loading, addList, updateList, deleteList, addTask, updateTask, deleteTask, reorderTasks };
+    return { lists, tasks, loading, removingIds, addList, updateList, deleteList, addTask, updateTask, deleteTask, reorderTasks, getColumnId };
 }

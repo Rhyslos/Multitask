@@ -4,9 +4,8 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 // Hook
 export function useDragDrop({ tasks, onReorder, onGhostDrop }) {
     const [dragging, setDragging] = useState(null);
-    const [clone, setClone] = useState(null);
+    const [cloneMeta, setCloneMeta] = useState(null);
     const [insertionPoint, setInsertionPoint] = useState(null);
-    const [tilt, setTilt] = useState(0);
 
     const listRefs = useRef({});
     const taskRefs = useRef({});
@@ -15,6 +14,14 @@ export function useDragDrop({ tasks, onReorder, onGhostDrop }) {
     const draggingRef = useRef(null);
     const tasksRef = useRef(tasks);
     const lastPos = useRef({ x: 0, y: 0 });
+    const cloneOuterRef = useRef(null);
+    const cloneInnerRef = useRef(null);
+    const tiltRef = useRef(0);
+    const targetTiltRef = useRef(0);
+    const rafRef = useRef(null);
+
+    const onGhostDropRef = useRef(onGhostDrop);
+    useEffect(() => { onGhostDropRef.current = onGhostDrop; }, [onGhostDrop]);
 
     useEffect(() => { tasksRef.current = tasks; }, [tasks]);
 
@@ -33,6 +40,9 @@ export function useDragDrop({ tasks, onReorder, onGhostDrop }) {
         else delete ghostRefs.current[key];
     }
 
+    function registerCloneOuter(el) { cloneOuterRef.current = el; }
+    function registerCloneInner(el) { cloneInnerRef.current = el; }
+
     function startDrag(e, task, element) {
         if (e.button !== 0) return;
         e.preventDefault();
@@ -44,19 +54,24 @@ export function useDragDrop({ tasks, onReorder, onGhostDrop }) {
         };
 
         lastPos.current = { x: e.clientX, y: e.clientY };
+        tiltRef.current = 0;
+        targetTiltRef.current = 0;
 
-        const cloneData = {
-            id: task.id,
-            width: rect.width,
-            height: rect.height,
-            x: e.clientX - dragOffset.current.x,
-            y: e.clientY - dragOffset.current.y,
-        };
+        const x = e.clientX - dragOffset.current.x;
+        const y = e.clientY - dragOffset.current.y;
 
+        setCloneMeta({ width: rect.width, height: rect.height });
         draggingRef.current = task;
         setDragging(task.id);
-        setClone(cloneData);
-        setTilt(0);
+
+        requestAnimationFrame(() => {
+            if (cloneOuterRef.current) {
+                cloneOuterRef.current.style.transform = `translate(${x}px, ${y}px)`;
+            }
+            if (cloneInnerRef.current) {
+                cloneInnerRef.current.style.transform = `scale(1.08) rotate(0deg)`;
+            }
+        });
     }
 
     const onMouseMove = useCallback((e) => {
@@ -65,14 +80,22 @@ export function useDragDrop({ tasks, onReorder, onGhostDrop }) {
         const dx = e.clientX - lastPos.current.x;
         lastPos.current = { x: e.clientX, y: e.clientY };
 
-        const newTilt = Math.max(-15, Math.min(15, dx * 0.8));
-        setTilt(newTilt);
+        targetTiltRef.current = Math.max(-15, Math.min(15, dx * 0.8));
 
-        setClone(prev => prev ? ({
-            ...prev,
-            x: e.clientX - dragOffset.current.x,
-            y: e.clientY - dragOffset.current.y,
-        }) : null);
+        const x = e.clientX - dragOffset.current.x;
+        const y = e.clientY - dragOffset.current.y;
+
+        if (rafRef.current) cancelAnimationFrame(rafRef.current);
+        rafRef.current = requestAnimationFrame(() => {
+            tiltRef.current = tiltRef.current + (targetTiltRef.current - tiltRef.current) * 0.15;
+
+            if (cloneOuterRef.current) {
+                cloneOuterRef.current.style.transform = `translate(${x}px, ${y}px)`;
+            }
+            if (cloneInnerRef.current) {
+                cloneInnerRef.current.style.transform = `scale(1.08) rotate(${tiltRef.current}deg)`;
+            }
+        });
 
         const point = getInsertionPoint(e.clientX, e.clientY, draggingRef.current.id);
         setInsertionPoint(point);
@@ -80,6 +103,8 @@ export function useDragDrop({ tasks, onReorder, onGhostDrop }) {
 
     const onMouseUp = useCallback((e) => {
         if (!draggingRef.current) return;
+
+        if (rafRef.current) cancelAnimationFrame(rafRef.current);
 
         const point = getInsertionPoint(e.clientX, e.clientY, draggingRef.current.id);
 
@@ -92,7 +117,7 @@ export function useDragDrop({ tasks, onReorder, onGhostDrop }) {
                     e.clientX >= rect.left && e.clientX <= rect.right &&
                     e.clientY >= rect.top && e.clientY <= rect.bottom
                 ) {
-                    onGhostDrop?.(key, draggingRef.current);
+                    onGhostDropRef.current?.(key, draggingRef.current);
                     break;
                 }
             }
@@ -100,9 +125,10 @@ export function useDragDrop({ tasks, onReorder, onGhostDrop }) {
 
         draggingRef.current = null;
         setDragging(null);
-        setClone(null);
+        setCloneMeta(null);
         setInsertionPoint(null);
-        setTilt(0);
+        tiltRef.current = 0;
+        targetTiltRef.current = 0;
     }, []);
 
     useEffect(() => {
@@ -171,5 +197,15 @@ export function useDragDrop({ tasks, onReorder, onGhostDrop }) {
         onReorder(allUpdates, listId, task.id);
     }
 
-    return { dragging, clone, tilt, insertionPoint, registerList, registerTask, registerGhost, startDrag };
+    return {
+        dragging,
+        cloneMeta,
+        insertionPoint,
+        registerList,
+        registerTask,
+        registerGhost,
+        registerCloneOuter,
+        registerCloneInner,
+        startDrag,
+    };
 }

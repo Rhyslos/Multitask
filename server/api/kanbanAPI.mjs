@@ -5,7 +5,7 @@ import { catchAsync } from './apiUtils.mjs';
 
 // Router
 export default function createKanbanRouter(db) {
-    const router = express.Router();
+    const router = express.Router(); 
 
 
     // Board
@@ -27,7 +27,6 @@ export default function createKanbanRouter(db) {
         res.json({ lists, tasks });
     }));
 
-
     // Lists
     router.post('/lists', catchAsync(async (req, res) => {
         const { id, name, category, color, direction, workspaceID, columnIndex } = req.body;
@@ -38,6 +37,16 @@ export default function createKanbanRouter(db) {
         );
 
         res.status(201).json({ message: 'List created successfully' });
+    }));
+
+    router.put('/lists/reorder', catchAsync(async (req, res) => {
+        const { updates } = req.body;
+
+        await Promise.all(updates.map(({ id, columnIndex }) =>
+            db.run('UPDATE lists SET columnIndex = ? WHERE id = ?', [columnIndex, id])
+        ));
+
+        res.json({ message: 'Lists reordered successfully' });
     }));
 
     router.put('/lists/:listId', catchAsync(async (req, res) => {

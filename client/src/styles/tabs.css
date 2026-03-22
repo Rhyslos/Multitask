@@ -1,0 +1,187 @@
+/* Subbar kanban variant */
+.subbar--kanban {
+    padding: 0 16px;
+    display: flex;
+    align-items: flex-end;
+    overflow: hidden;
+    height: 100px;
+}
+
+
+/* Tab strip */
+.kanban-tabs {
+    width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+
+.kanban-tabs::-webkit-scrollbar {
+    display: none;
+}
+
+.kanban-tabs-strip {
+    display: flex;
+    align-items: flex-end;
+    gap: 4px;
+    min-width: max-content;
+}
+
+
+/* Individual tab */
+.kanban-tab {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 8px 14px;
+    min-width: 100px;
+    max-width: 200px;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    border-bottom: none;
+    border-radius: 8px 8px 0 0;
+    background: color-mix(in srgb, var(--tab-color, #e2ddd8) 50%, transparent);
+    color: var(--muted);
+    font-family: 'Noto Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    transition: color 0.15s, background 0.15s, border-color 0.15s;
+    user-select: none;
+    white-space: nowrap;
+}
+
+.kanban-tab:hover {
+    color: var(--ink);
+    background: color-mix(in srgb, var(--tab-color, #e2ddd8) 70%, transparent);
+}
+
+.kanban-tab.active {
+    color: var(--ink);
+    background: var(--tab-color, var(--accent-lt));
+    border-color: var(--border);
+    padding-top: 10px;
+}
+
+.kanban-tab-dot {
+    flex-shrink: 0;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+}
+
+.kanban-tab-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    outline: none;
+    border-radius: 4px;
+    padding: 2px 3px;
+    color: var(--ink);
+}
+
+.kanban-tab-name[contenteditable="true"] {
+    background: rgba(255, 255, 255, 0.6);
+    border: 1.5px solid rgba(0, 0, 0, 0.2);
+    min-width: 60px;
+    cursor: text;
+}
+
+
+/* Tab action buttons */
+.kanban-tab-actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    margin-left: 2px;
+}
+
+.kanban-tab-color-btn,
+.kanban-tab-archive-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--ink);
+    font-size: 10px;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s, background 0.15s;
+}
+
+.kanban-tab.active .kanban-tab-color-btn,
+.kanban-tab.active .kanban-tab-archive-btn {
+    opacity: 0.4;
+}
+
+.kanban-tab-color-btn:hover,
+.kanban-tab-archive-btn:hover {
+    opacity: 1 !important;
+    background: rgba(0, 0, 0, 0.08);
+}
+
+
+/* Colour picker — portalled to body, fixed position */
+.kanban-tab-color-picker {
+    position: fixed;
+    z-index: 1000;
+    display: flex;
+    flex-direction: row;
+    gap: 6px;
+    padding: 10px 12px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 8px 24px var(--shadow);
+}
+
+.kanban-tab-color-swatch {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 1.5px solid rgba(0, 0, 0, 0.1);
+    cursor: pointer;
+    transition: transform 0.1s, border-color 0.1s, box-shadow 0.1s;
+    padding: 0;
+    flex-shrink: 0;
+}
+
+.kanban-tab-color-swatch:hover {
+    transform: scale(1.2);
+    border-color: rgba(0, 0, 0, 0.25);
+}
+
+.kanban-tab-color-swatch.selected {
+    border-color: var(--ink);
+    box-shadow: 0 0 0 2px var(--panel), 0 0 0 3.5px var(--ink);
+}
+
+
+/* Add tab button */
+.kanban-tab-add-btn {
+    flex-shrink: 0;
+    align-self: flex-end;
+    width: 100px;
+    height: 38px;
+    margin-left: 2px;
+    padding: 0;
+    border: 2px dashed var(--border);
+    border-bottom: none;
+    border-radius: 8px 8px 0 0;
+    background: transparent;
+    color: var(--muted);
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.kanban-tab-add-btn:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: var(--accent-lt);
+}

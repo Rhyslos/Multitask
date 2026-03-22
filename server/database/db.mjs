@@ -40,6 +40,16 @@ export async function initializeDatabase() {
             FOREIGN KEY (categoryID) REFERENCES categories (id) ON DELETE SET NULL
         );
 
+        CREATE TABLE IF NOT EXISTS kanban_tabs (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL DEFAULT 'New Tab',
+            color TEXT NOT NULL DEFAULT '#888888',
+            tabOrder INTEGER NOT NULL DEFAULT 0,
+            isArchived INTEGER NOT NULL DEFAULT 0,
+            workspaceID TEXT NOT NULL,
+            FOREIGN KEY (workspaceID) REFERENCES workspaces (id) ON DELETE CASCADE
+        );
+
         CREATE TABLE IF NOT EXISTS lists (
             id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
@@ -48,7 +58,9 @@ export async function initializeDatabase() {
             direction TEXT,
             columnIndex INTEGER NOT NULL DEFAULT 0,
             workspaceID TEXT NOT NULL,
-            FOREIGN KEY (workspaceID) REFERENCES workspaces (id) ON DELETE CASCADE
+            tabID TEXT,
+            FOREIGN KEY (workspaceID) REFERENCES workspaces (id) ON DELETE CASCADE,
+            FOREIGN KEY (tabID) REFERENCES kanban_tabs (id) ON DELETE CASCADE
         );
 
         CREATE TABLE IF NOT EXISTS tasks (
@@ -71,6 +83,12 @@ export async function initializeDatabase() {
             FOREIGN KEY (workspaceID) REFERENCES workspaces (id) ON DELETE CASCADE
         );
     `);
+
+    // Migration
+    const listCols = await db.all(`PRAGMA table_info(lists)`);
+    if (!listCols.find(c => c.name === 'tabID')) {
+        await db.exec(`ALTER TABLE lists ADD COLUMN tabID TEXT REFERENCES kanban_tabs(id) ON DELETE CASCADE`);
+    }
 
     return db;
 }

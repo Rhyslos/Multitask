@@ -4,7 +4,7 @@ const API = 'http://localhost:8080/api';
 
 
 // Hook
-export function useKanban(workspaceID) {
+export function useKanban(workspaceID, tabID) {
     const [lists, setLists] = useState([]);
     const [tasks, setTasks] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -19,19 +19,33 @@ export function useKanban(workspaceID) {
     }
 
     useEffect(() => {
-        if (!workspaceID) return;
-        fetch(`${API}/kanban/board/${workspaceID}`)
+        if (!workspaceID || !tabID) return;
+        setLoading(true);
+        setLists([]);
+        setTasks([]);
+        columnIds.current = {};
+
+        fetch(`${API}/kanban/board/${workspaceID}/${tabID}`)
             .then(r => r.json())
             .then(data => {
                 setLists(data.lists || []);
                 setTasks(data.tasks || []);
             })
             .finally(() => setLoading(false));
-    }, [workspaceID]);
+    }, [workspaceID, tabID]);
 
     async function addList(columnIndex, workspaceID) {
         const id = crypto.randomUUID();
-        const newList = { id, name: 'New List', category: '', color: '', direction: 'vertical', columnIndex, workspaceID };
+        const newList = {
+            id,
+            name: 'New List',
+            category: '',
+            color: '',
+            direction: 'vertical',
+            columnIndex,
+            workspaceID,
+            tabID,
+        };
 
         await fetch(`${API}/kanban/lists`, {
             method: 'POST',
@@ -139,8 +153,7 @@ export function useKanban(workspaceID) {
 
     async function reorderTasks(updates, targetListId, taskId) {
         setTasks(prev => {
-            const updated = [...prev];
-            return updated.map(t => {
+            return prev.map(t => {
                 const update = updates.find(u => u.id === t.id);
                 return update ? { ...t, listID: update.listID, taskOrder: update.taskOrder } : t;
             });

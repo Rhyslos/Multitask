@@ -83,8 +83,8 @@
 /* Column */
 .kanban-column {
     position: absolute;
-    top: 24px;
-    left: calc(var(--col) * (300px + 16px) + 24px);
+    top: 0;
+    left: calc(var(--col) * (300px + 16px));
     display: flex;
     flex-direction: column;
     gap: 16px;

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { useKanban } from '../hooks/useKanban';
+import { useTabs } from '../hooks/useTabs';
 import { useWorkspaces } from '../hooks/useWorkspaces';
 import { useAuth } from '../hooks/useAuth';
 import { useDragDrop } from '../hooks/useDragDrop';
@@ -17,7 +18,10 @@ export default function Kanban() {
     const { workspaceID } = useParams();
     const { user } = useAuth();
     const { categories } = useWorkspaces(user?.id);
-    const { lists, tasks, loading, removingIds, addList, updateList, deleteList, addTask, updateTask, deleteTask, reorderTasks, getColumnId } = useKanban(workspaceID);
+
+    const { tabs, activeTabId, setActiveTabId, addTab, updateTab, archiveTab } = useTabs(workspaceID);
+
+    const { lists, tasks, loading, removingIds, addList, updateList, deleteList, addTask, updateTask, deleteTask, reorderTasks, getColumnId } = useKanban(workspaceID, activeTabId);
 
     const [activeTask, setActiveTask] = useState(null);
     const [focusedListId, setFocusedListId] = useState(null);
@@ -93,7 +97,14 @@ export default function Kanban() {
     return (
         <div className="kanban-root">
             <Navbar />
-            <Subbar />
+            <Subbar
+                tabs={tabs}
+                activeTabId={activeTabId}
+                onTabSelect={setActiveTabId}
+                onTabAdd={addTab}
+                onTabUpdate={updateTab}
+                onTabArchive={archiveTab}
+            />
 
             <div className="kanban-topbar" ref={topbarRef}>
                 {Array.from({ length: plusButtonCount }).map((_, i) => (
@@ -147,8 +158,8 @@ export default function Kanban() {
                             ref={el => registerGhost('new-column', el)}
                             style={{
                                 position: 'absolute',
-                                top: 24,
-                                left: columnCount * (300 + 16) + 24,
+                                top: 0,
+                                left: columnCount * (300 + 16),
                             }}
                         >
                             <span>+ New column</span>
@@ -170,10 +181,7 @@ export default function Kanban() {
                         willChange: 'transform',
                     }}
                 >
-                    <div
-                        ref={registerCloneInner}
-                        className="kanban-drag-clone"
-                    >
+                    <div ref={registerCloneInner} className="kanban-drag-clone">
                         <KanbanTask
                             task={draggingTask}
                             categories={categories}

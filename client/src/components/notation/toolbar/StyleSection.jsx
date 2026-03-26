@@ -1,4 +1,17 @@
+import { useState, useEffect } from 'react';
 import { FONTS } from './constants';
+
+// Helper functions
+function getTextStyleAttrs(editor) {
+    const attrs = editor.getAttributes('textStyle');
+
+    if (editor.state.selection.empty && editor.state.storedMarks) {
+        const mark = editor.state.storedMarks.find(m => m.type.name === 'textStyle');
+        if (mark) return { ...attrs, ...mark.attrs };
+    }
+
+    return attrs;
+}
 
 function getActiveStyle(editor) {
     if (editor.isActive('heading', { level: 1 })) return 'h1';
@@ -7,6 +20,7 @@ function getActiveStyle(editor) {
     return 'p';
 }
 
+// Event handlers
 function handleStyleChange(e, editor) {
     const val = e.target.value;
     if (val === 'p')  editor.chain().focus().setParagraph().run();
@@ -15,16 +29,39 @@ function handleStyleChange(e, editor) {
     if (val === 'h3') editor.chain().focus().toggleHeading({ level: 3 }).run();
 }
 
+// Main component
 export default function StyleSection({ editor }) {
-    const rawFont = (editor.getAttributes('textStyle').fontFamily || '')
+    // State management
+    const [, setForceRender] = useState(0);
+
+    // Lifecycle hooks
+    useEffect(() => {
+        if (!editor) return;
+
+        const handleTransaction = () => {
+            setForceRender(prev => prev + 1);
+        };
+
+        editor.on('transaction', handleTransaction);
+
+        return () => {
+            editor.off('transaction', handleTransaction);
+        };
+    }, [editor]);
+
+    const activeTextStyle = getTextStyleAttrs(editor);
+
+    const rawFont = (activeTextStyle.fontFamily || '')
         .replace(/^['"]|['"]$/g, '')
         .trim();
 
+    const rawFontBase = rawFont.split(',')[0].trim().toLowerCase();
+
     const currentFont = FONTS.find(f =>
-        f.value.split(',')[0].trim().toLowerCase() === rawFont.toLowerCase()
+        f.value.split(',')[0].trim().toLowerCase() === rawFontBase
     )?.value ?? FONTS[0].value;
 
-    let rawWeight = editor.getAttributes('textStyle').fontWeight || '400';
+    let rawWeight = activeTextStyle.fontWeight || '400';
     if (rawWeight === 'bold')   rawWeight = '700';
     if (rawWeight === 'normal') rawWeight = '400';
     const currentWeight = rawWeight.toString();

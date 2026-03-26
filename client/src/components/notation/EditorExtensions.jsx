@@ -15,7 +15,11 @@ import Placeholder from '@tiptap/extension-placeholder';
 import { FontWeight } from './FointWeight';
 
 export const editorExtensions = [
-    StarterKit,
+    // Exclude Link and Underline from StarterKit — we add our own configured versions below
+    StarterKit.configure({
+        link: false,
+        underline: false,
+    }),
     TextAlign.configure({ types: ['heading', 'paragraph'] }),
     TextStyle,
     Color,

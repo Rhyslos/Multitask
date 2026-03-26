@@ -1,4 +1,4 @@
-/* Root */
+/* root styles */
 .notation-root {
     display: flex;
     flex-direction: column;
@@ -6,7 +6,7 @@
     overflow: hidden;
 }
 
-/* Body */
+/* body styles */
 .notation-body {
     flex: 1;
     overflow-y: auto;
@@ -21,7 +21,7 @@
     font-size: 14px;
 }
 
-/* Editor */
+/* editor styles */
 .notation-editor {
     width: 100%;
     max-width: 780px;
@@ -41,6 +41,7 @@
     box-shadow: 0 2px 8px var(--shadow);
 }
 
+/* typography styles */
 .notation-editor .tiptap h1 {
     font-family: 'DM Serif Display', serif;
     font-size: 32px;
@@ -84,7 +85,7 @@
     padding: 1px 2px;
 }
 
-/* Task Lists */
+/* task list styles */
 .notation-editor .tiptap ul[data-type="taskList"] {
     list-style: none;
     padding: 0;
@@ -101,7 +102,7 @@
     user-select: none;
 }
 
-/* Placeholder Extension */
+/* placeholder styles */
 .notation-editor .tiptap p.is-editor-empty:first-child::before {
     color: var(--muted);
     content: attr(data-placeholder);
@@ -110,35 +111,49 @@
     pointer-events: none;
 }
 
-/* Toolbar */
+/* toolbar styles */
 .tiptap-toolbar {
     display: flex;
     flex-direction: row;
     align-items: center;
-    gap: 16px;
+    justify-content: flex-start;
+    gap: 8px;
     flex: 1;
     flex-wrap: wrap; 
     overflow: visible; 
 }
 
+/* subbar section styles */
 .tiptap-toolbar .subbar-section {
-    display: flex;
-    flex-direction: row; 
-    align-items: center;
-    gap: 4px;
+    display: flex !important;
+    flex-direction: row !important; 
+    align-items: center !important;
+    justify-content: flex-start !important;
+    gap: 2px !important;
     border-right: 1px solid var(--border);
-    padding-right: 16px;
-    margin-bottom: 0; 
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+    margin: 0 !important; 
+    
+    flex: 0 0 auto !important;
+    width: max-content !important;
+    min-width: 0 !important;
+}
+
+.tiptap-toolbar .subbar-section:first-child {
+    padding-left: 0 !important;
 }
 
 .tiptap-toolbar .subbar-section:last-child {
     border-right: none;
+    padding-right: 0 !important;
 }
 
+/* toolbar button styles */
 .tiptap-toolbar .subbar-section > button {
     height: 32px;
-    min-width: 32px;
-    padding: 0 8px;
+    min-width: 28px;
+    padding: 0 4px;
     border: none;
     border-radius: 6px;
     background: transparent;
@@ -173,7 +188,7 @@
     margin-left: 8px;
 }
 
-/* Color Picker */
+/* color picker styles */
 .tiptap-color-btn {
     flex-direction: column;
     gap: 2px;
@@ -220,7 +235,7 @@
     transform: scale(1.2);
 }
 
-/* Save Indicator */
+/* save indicator styles */
 .notation-save-indicator {
     font-size: 12px;
     color: var(--muted);
@@ -228,23 +243,26 @@
     white-space: nowrap;
 }
 
-.notation-character-count {
-    position: fixed;
-    bottom: 24px;
-    right: 32px;
-    font-size: 12px;
+/* word count styles */
+.tiptap-toolbar .notation-word-count {
+    font-size: 13px;
     color: var(--muted);
-    background: white;
-    padding: 4px 12px;
-    border-radius: 20px;
-    border: 1px solid var(--border);
-    box-shadow: 0 2px 8px var(--shadow);
+    user-select: none;
+    white-space: nowrap;
+    min-width: 65px;
+    padding-left: 0 !important;
+    padding-right: 8px !important;
+    font-variant-numeric: tabular-nums;
+    
+    /* Ensure the text aligns near the border */
+    display: flex !important;
+    justify-content: flex-end !important;
 }
 
-/* Custom Select Dropdowns */
+/* dropdown styles */
 .tiptap-select {
     height: 32px;
-    padding: 0 28px 0 12px;
+    padding: 0 24px 0 8px;
     border: 1px solid var(--border);
     border-radius: 6px;
     font-family: 'Noto Sans', sans-serif;

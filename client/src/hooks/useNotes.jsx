@@ -2,8 +2,6 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 
 const API = 'http://localhost:8080/api';
 
-
-// Hook
 export function useNotes(workspaceID) {
     const [content, setContent] = useState(null);
     const [saved, setSaved] = useState(true);
@@ -38,7 +36,6 @@ export function useNotes(workspaceID) {
     function handleUpdate(newContent) {
         setContent(newContent);
         setSaved(false);
-
         if (saveTimer.current) clearTimeout(saveTimer.current);
         saveTimer.current = setTimeout(() => save(newContent), 1000);
     }

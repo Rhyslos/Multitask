@@ -6,7 +6,6 @@
     overflow: hidden;
 }
 
-
 /* Body */
 .notation-body {
     flex: 1;
@@ -14,13 +13,13 @@
     display: flex;
     justify-content: center;
     padding: 48px 24px;
+    position: relative;
 }
 
 .notation-loading {
     color: var(--muted);
     font-size: 14px;
 }
-
 
 /* Editor */
 .notation-editor {
@@ -85,30 +84,58 @@
     padding: 1px 2px;
 }
 
+/* Task Lists */
+.notation-editor .tiptap ul[data-type="taskList"] {
+    list-style: none;
+    padding: 0;
+}
+
+.notation-editor .tiptap ul[data-type="taskList"] li {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.notation-editor .tiptap ul[data-type="taskList"] li > label {
+    margin-top: 4px;
+    user-select: none;
+}
+
+/* Placeholder Extension */
+.notation-editor .tiptap p.is-editor-empty:first-child::before {
+    color: var(--muted);
+    content: attr(data-placeholder);
+    float: left;
+    height: 0;
+    pointer-events: none;
+}
 
 /* Toolbar */
 .tiptap-toolbar {
     display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 16px;
+    flex: 1;
+    flex-wrap: wrap; 
+    overflow: visible; 
+}
+
+.tiptap-toolbar .subbar-section {
+    display: flex;
+    flex-direction: row; 
     align-items: center;
     gap: 4px;
-    flex: 1;
-    flex-wrap: wrap;
+    border-right: 1px solid var(--border);
+    padding-right: 16px;
+    margin-bottom: 0; 
 }
 
-.tiptap-toolbar-group {
-    display: flex;
-    align-items: center;
-    gap: 2px;
+.tiptap-toolbar .subbar-section:last-child {
+    border-right: none;
 }
 
-.tiptap-toolbar-divider {
-    width: 1px;
-    height: 20px;
-    background: var(--border);
-    margin: 0 6px;
-}
-
-.tiptap-btn {
+.tiptap-toolbar .subbar-section > button {
     height: 32px;
     min-width: 32px;
     padding: 0 8px;
@@ -125,34 +152,33 @@
     transition: background 0.15s, color 0.15s;
 }
 
-.tiptap-btn:hover {
+.tiptap-toolbar .subbar-section > button:hover {
     background: var(--accent-lt);
     color: var(--accent);
 }
 
-.tiptap-btn.active {
+.tiptap-toolbar .subbar-section > button.active {
     background: var(--accent-lt);
     color: var(--accent);
 }
 
-.tiptap-select {
-    height: 32px;
-    padding: 0 8px;
-    border: 1.5px solid var(--border);
-    border-radius: 6px;
-    font-family: 'Noto Sans', sans-serif;
-    font-size: 13px;
-    color: var(--ink);
-    background: white;
-    outline: none;
+.tiptap-toolbar input[type="color"] {
     cursor: pointer;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: none;
+    width: 24px;
+    height: 24px;
+    margin-left: 8px;
 }
 
+/* Color Picker */
 .tiptap-color-btn {
     flex-direction: column;
     gap: 2px;
-    padding: 4px 6px;
-    height: 36px;
+    padding: 4px 6px !important;
+    height: 36px !important;
 }
 
 .tiptap-color-bar {
@@ -163,38 +189,82 @@
 
 .tiptap-color-picker {
     position: absolute;
-    top: calc(100% + 6px);
-    left: 0;
-    background: var(--panel);
+    top: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: white;
     border: 1px solid var(--border);
-    border-radius: 10px;
+    border-radius: 8px;
     padding: 8px;
-    display: flex;
-    flex-wrap: wrap;
+    display: grid; 
+    grid-template-columns: repeat(3, 1fr); 
     gap: 6px;
-    box-shadow: 0 8px 24px var(--shadow);
-    z-index: 200;
-    width: 140px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+    z-index: 9999; 
+    width: max-content;
 }
 
 .tiptap-color-swatch {
-    width: 24px;
-    height: 24px;
+    width: 24px !important; 
+    height: 24px !important;
+    min-width: 0 !important; 
+    padding: 0 !important;
     border-radius: 50%;
     cursor: pointer;
     border: none;
     transition: transform 0.15s;
+    display: block !important;
 }
 
 .tiptap-color-swatch:hover {
     transform: scale(1.2);
 }
 
-
-/* Save indicator */
+/* Save Indicator */
 .notation-save-indicator {
     font-size: 12px;
     color: var(--muted);
     padding: 0 16px;
     white-space: nowrap;
+}
+
+.notation-character-count {
+    position: fixed;
+    bottom: 24px;
+    right: 32px;
+    font-size: 12px;
+    color: var(--muted);
+    background: white;
+    padding: 4px 12px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    box-shadow: 0 2px 8px var(--shadow);
+}
+
+/* Custom Select Dropdowns */
+.tiptap-select {
+    height: 32px;
+    padding: 0 28px 0 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-family: 'Noto Sans', sans-serif;
+    font-size: 13px;
+    color: var(--ink);
+    background-color: transparent;
+    appearance: none;
+    background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%236B7280%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpolyline%20points%3D%226%209%2012%2015%2018%209%22%3E%3C%2Fpolyline%3E%3C%2Fsvg%3E");
+    background-repeat: no-repeat;
+    background-position: right 6px center;
+    background-size: 14px;
+    cursor: pointer;
+    transition: border-color 0.15s, background-color 0.15s;
+}
+
+.tiptap-select:hover {
+    background-color: var(--accent-lt);
+}
+
+.tiptap-select:focus {
+    outline: none;
+    border-color: var(--accent);
 }

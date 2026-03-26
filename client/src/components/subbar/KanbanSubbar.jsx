@@ -1,5 +1,5 @@
 import Subbar from './Subbar';
-import KanbanTabs from './kanban/KanbanTabs';
+import KanbanTabs from '../kanban/KanbanTabs';
 
 // Component
 export default function KanbanSubbar({ tabs, activeTabId, onTabSelect, onTabAdd, onTabUpdate, onTabArchive }) {

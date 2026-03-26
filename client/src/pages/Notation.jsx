@@ -7,9 +7,7 @@ import { TextStyle } from '@tiptap/extension-text-style';
 import Highlight from '@tiptap/extension-highlight';
 import { useNotes } from '../hooks/useNotes';
 import Navbar from '../components/Navbar';
-import Subbar from '../components/Subbar';
-import TipTapToolbar from '../components/notation/TipTapToolbar';
-
+import NotationSubbar from '../components/subbar/NotationSubbar';
 
 // Page
 export default function Notation() {
@@ -33,12 +31,7 @@ export default function Notation() {
     return (
         <div className="notation-root">
             <Navbar />
-            <Subbar>
-                <TipTapToolbar editor={editor} />
-                <div className="notation-save-indicator">
-                    {saved ? 'Saved' : 'Saving…'}
-                </div>
-            </Subbar>
+            <NotationSubbar editor={editor} saved={saved} />
 
             <div className="notation-body">
                 {loading ? (

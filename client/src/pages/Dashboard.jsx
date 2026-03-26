@@ -4,7 +4,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useWorkspaces } from '../hooks/useWorkspaces';
 import { useAnimatedRemoval } from '../hooks/useAnimatedRemoval';
 import Navbar from '../components/Navbar';
-import Subbar from '../components/Subbar';
+import DefaultSubbar from '../components/subbar/DefaultSubbar';
 import CategoryFilter from '../components/CategoryFilter';
 import CreateWorkspaceModal from '../components/CreateWorkspaceModal';
 import AnimatedRemoval from '../components/AnimatedRemoval';
@@ -40,7 +40,7 @@ export default function Dashboard() {
     return (
         <div className="dashboard-root">
             <Navbar />
-            <Subbar />
+            <DefaultSubbar />
             <main className="dashboard-main">
                 <div className="grid-root">
                     <div className="grid-filters">

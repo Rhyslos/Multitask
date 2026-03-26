@@ -7,7 +7,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useDragDrop } from '../hooks/useDragDrop';
 import { useFlipAnimation } from '../hooks/useFlipAnimation';
 import Navbar from '../components/Navbar';
-import Subbar from '../components/Subbar';
+import KanbanSubbar from '../components/subbar/KanbanSubbar';
 import KanbanColumn from '../components/kanban/KanbanColumn';
 import KanbanTask from '../components/kanban/KanbanTask';
 import TaskModal from '../components/kanban/TaskModal';
@@ -97,7 +97,7 @@ export default function Kanban() {
     return (
         <div className="kanban-root">
             <Navbar />
-            <Subbar
+            <KanbanSubbar
                 tabs={tabs}
                 activeTabId={activeTabId}
                 onTabSelect={setActiveTabId}

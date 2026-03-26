@@ -5,7 +5,6 @@ import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import Kanban from './pages/Kanban';
 import Notation from './pages/Notation';
-import DrawchartTemp from './pages/DrawchartTemp';
 
 
 // Route guard
@@ -26,7 +25,6 @@ function AppRoutes() {
             <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
             <Route path="/workspace/:workspaceID/kanban" element={<PrivateRoute><Kanban /></PrivateRoute>} />
             <Route path="/workspace/:workspaceID/notation" element={<PrivateRoute><Notation /></PrivateRoute>} />
-            <Route path="/workspace/:workspaceID/graph" element={<PrivateRoute><DrawchartTemp /></PrivateRoute>} />
             <Route path="*" element={<Navigate to={user ? '/dashboard' : '/login'} replace />} />
         </Routes>
     );

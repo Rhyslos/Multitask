@@ -1,31 +1,12 @@
 import { useState } from 'react';
-import { useLocation } from 'react-router-dom';
-import KanbanTabs from './kanban/KanbanTabs';
+import Subbar from './Subbar';
 
 // Component
-export default function Subbar({ tabs, activeTabId, onTabSelect, onTabAdd, onTabUpdate, onTabArchive }) {
+export default function DefaultSubbar() {
     const [collapsed, setCollapsed] = useState(false);
-    const location = useLocation();
-
-    const isKanban = location.pathname.includes('/kanban');
-
-    if (isKanban) {
-        return (
-            <div className="subbar subbar--kanban">
-                <KanbanTabs
-                    tabs={tabs ?? []}
-                    activeTabId={activeTabId}
-                    onSelect={onTabSelect}
-                    onAdd={onTabAdd}
-                    onUpdate={onTabUpdate}
-                    onArchive={onTabArchive}
-                />
-            </div>
-        );
-    }
 
     return (
-        <div className="subbar">
+        <Subbar>
             <div className="subbar-section">
                 <span className="subbar-label">Recent</span>
                 <div className="subbar-placeholder">No recent workspaces</div>
@@ -62,6 +43,6 @@ export default function Subbar({ tabs, activeTabId, onTabSelect, onTabAdd, onTab
                     </div>
                 </div>
             )}
-        </div>
+        </Subbar>
     );
 }

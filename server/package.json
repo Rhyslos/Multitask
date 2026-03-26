@@ -2,7 +2,6 @@
   "dependencies": {
     "cors": "^2.8.6",
     "express": "^5.2.1",
-    "node": "^25.8.0",
     "sqlite": "^5.1.1",
     "sqlite3": "^6.0.1"
   }

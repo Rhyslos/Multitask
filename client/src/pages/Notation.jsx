@@ -1,3 +1,4 @@
+// imports
 import { useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { useEditor, EditorContent } from '@tiptap/react';
@@ -6,10 +7,13 @@ import { editorExtensions } from '../components/notation/EditorExtensions';
 import Navbar from '../components/Navbar';
 import NotationSubbar from '../components/subbar/NotationSubbar';
 
+// page component
 export default function Notation() {
+    // hooks
     const { workspaceID } = useParams();
     const { content, saved, loading, handleUpdate } = useNotes(workspaceID);
 
+    // editor initialization
     const editor = useEditor({
         extensions: editorExtensions,
         content: '<p></p>',
@@ -18,6 +22,7 @@ export default function Notation() {
         },
     });
 
+    // lifecycle hooks
     useEffect(() => {
         if (!editor || !content || loading) return;
         if (editor.isEmpty) {
@@ -25,6 +30,7 @@ export default function Notation() {
         }
     }, [editor, content, loading]);
 
+    // ui rendering
     return (
         <div className="notation-root">
             <Navbar />
@@ -37,12 +43,6 @@ export default function Notation() {
                     <EditorContent editor={editor} className="notation-editor" />
                 )}
             </div>
-
-            {!loading && editor && (
-                <div className="notation-character-count">
-                    {editor.storage.characterCount.characters()} characters
-                </div>
-            )}
         </div>
     );
 }

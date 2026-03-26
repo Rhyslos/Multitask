@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { FONTS } from './constants';
 
-// Helper functions
+// helper functions
 function getTextStyleAttrs(editor) {
     const attrs = editor.getAttributes('textStyle');
 
@@ -20,7 +20,7 @@ function getActiveStyle(editor) {
     return 'p';
 }
 
-// Event handlers
+// event handlers
 function handleStyleChange(e, editor) {
     const val = e.target.value;
     if (val === 'p')  editor.chain().focus().setParagraph().run();
@@ -29,12 +29,12 @@ function handleStyleChange(e, editor) {
     if (val === 'h3') editor.chain().focus().toggleHeading({ level: 3 }).run();
 }
 
-// Main component
+// main component
 export default function StyleSection({ editor }) {
-    // State management
+    // state management
     const [, setForceRender] = useState(0);
 
-    // Lifecycle hooks
+    // lifecycle hooks
     useEffect(() => {
         if (!editor) return;
 

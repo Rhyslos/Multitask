@@ -1,10 +1,16 @@
-import { useState, useEffect, useRef } from 'react';
+/**
+ * useKanban.jsx  — offline-first rewrite
+ *
+ * All reads come from the local sql.js DB.
+ * All writes go to the local DB first, then attempt the server.
+ */
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { useSync } from './useSync';
 
 const API = 'http://localhost:8080/api';
 
-
-// Hook
 export function useKanban(workspaceID, tabID) {
+    const { sm, ready } = useSync();
     const [lists, setLists] = useState([]);
     const [tasks, setTasks] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -18,151 +24,149 @@ export function useKanban(workspaceID, tabID) {
         return columnIds.current[colIndex];
     }
 
-    useEffect(() => {
-        if (!workspaceID || !tabID) return;
-        setLoading(true);
-        setLists([]);
-        setTasks([]);
+    // ── Load from local DB ────────────────────────────────────────────────────
+
+    const loadLocal = useCallback(() => {
+        if (!sm || !workspaceID || !tabID) return;
+        const ls = sm.query(
+            'SELECT * FROM lists WHERE workspaceID = ? AND tabID = ?',
+            [workspaceID, tabID]
+        );
+        const listIds = ls.map(l => l.id);
+        let ts = [];
+        if (listIds.length > 0) {
+            const ph = listIds.map(() => '?').join(',');
+            ts = sm.query(
+                `SELECT * FROM tasks WHERE listID IN (${ph}) ORDER BY taskOrder ASC`,
+                listIds
+            );
+        }
+        setLists(ls);
+        setTasks(ts);
+        setLoading(false);
         columnIds.current = {};
+    }, [sm, workspaceID, tabID]);
 
-        fetch(`${API}/kanban/board/${workspaceID}/${tabID}`)
-            .then(r => r.json())
-            .then(data => {
-                setLists(data.lists || []);
-                setTasks(data.tasks || []);
-            })
-            .finally(() => setLoading(false));
-    }, [workspaceID, tabID]);
+    // Re-render when local DB changes (after any write / sync pull)
+    useEffect(() => {
+        if (!sm) return;
+        loadLocal();
+        const unsub = sm.subscribe(loadLocal);
+        return unsub;
+    }, [sm, loadLocal]);
 
-    async function addList(columnIndex, workspaceID) {
+    // On mount, also try a server pull to get the latest data
+    useEffect(() => {
+        if (!ready || !workspaceID) return;
+        sm?.pullFromServer();
+    }, [ready, workspaceID]);
+
+    // ── Lists ─────────────────────────────────────────────────────────────────
+
+    async function addList(columnIndex, wsID) {
         const id = crypto.randomUUID();
-        const newList = {
-            id,
-            name: 'New List',
-            category: '',
-            color: '',
-            direction: 'vertical',
-            columnIndex,
-            workspaceID,
-            tabID,
-        };
+        const newList = { id, name: 'New List', category: '', color: '', direction: 'vertical', columnIndex, workspaceID: wsID, tabID };
 
-        await fetch(`${API}/kanban/lists`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(newList),
-        });
-
-        setLists(prev => [...prev, newList]);
+        await sm.execute(
+            `INSERT INTO lists (id, name, category, color, direction, workspaceID, columnIndex, tabID)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [id, newList.name, '', '', 'vertical', wsID, columnIndex, tabID],
+            { serverMethod: 'POST', serverPath: '/api/kanban/lists', serverBody: newList }
+        );
         return id;
     }
 
     async function updateList(listId, changes) {
-        setLists(prev => prev.map(l => l.id === listId ? { ...l, ...changes } : l));
-
-        await fetch(`${API}/kanban/lists/${listId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(changes),
-        });
+        const { name = '', category = '', color = '' } = changes;
+        await sm.execute(
+            `UPDATE lists SET name = ?, category = ?, color = ? WHERE id = ?`,
+            [name, category, color, listId],
+            { serverMethod: 'PUT', serverPath: `/api/kanban/lists/${listId}`, serverBody: changes }
+        );
     }
 
     async function deleteList(listId) {
-        const remainingLists = lists.filter(l => l.id !== listId);
-        const remainingColumns = [...new Set(remainingLists.map(l => l.columnIndex))].sort((a, b) => a - b);
-        const columnRemap = {};
-        remainingColumns.forEach((col, i) => { columnRemap[col] = i; });
-
-        const reorderedLists = remainingLists.map(l => ({
-            ...l,
-            columnIndex: columnRemap[l.columnIndex],
-        }));
+        // Re-index remaining columns (mirrors server logic)
+        const remaining = sm.query(
+            'SELECT * FROM lists WHERE workspaceID = ? AND id != ?',
+            [workspaceID, listId]
+        );
+        const cols = [...new Set(remaining.map(l => l.columnIndex))].sort((a, b) => a - b);
+        const remap = {};
+        cols.forEach((c, i) => { remap[c] = i; });
 
         setRemovingIds(prev => new Set([...prev, listId]));
 
-        await fetch(`${API}/kanban/lists/${listId}`, { method: 'DELETE' });
+        await sm.execute(`DELETE FROM lists WHERE id = ?`, [listId],
+            { serverMethod: 'DELETE', serverPath: `/api/kanban/lists/${listId}`, serverBody: {} }
+        );
+        await sm.execute(`DELETE FROM tasks WHERE listID = ?`, [listId]);
+
+        // Re-index
+        for (const l of remaining) {
+            const newIdx = remap[l.columnIndex];
+            if (newIdx !== l.columnIndex) {
+                await sm.execute(
+                    `UPDATE lists SET columnIndex = ? WHERE id = ?`,
+                    [newIdx, l.id],
+                    { serverMethod: 'PUT', serverPath: '/api/kanban/lists/reorder', serverBody: { updates: [{ id: l.id, columnIndex: newIdx }] } }
+                );
+            }
+        }
 
         setTimeout(() => {
-            const newColumnIds = {};
-            remainingColumns.forEach((oldCol, newIdx) => {
-                newColumnIds[newIdx] = columnIds.current[oldCol];
-            });
-            columnIds.current = newColumnIds;
-
-            setLists(reorderedLists);
-            setTasks(prev => prev.filter(t => t.listID !== listId));
-            setRemovingIds(prev => {
-                const next = new Set(prev);
-                next.delete(listId);
-                return next;
-            });
-
-            const updates = reorderedLists.map(l => ({ id: l.id, columnIndex: l.columnIndex }));
-            if (updates.length > 0) {
-                fetch(`${API}/kanban/lists/reorder`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ updates }),
-                });
-            }
+            setRemovingIds(prev => { const n = new Set(prev); n.delete(listId); return n; });
         }, 250);
     }
+
+    // ── Tasks ─────────────────────────────────────────────────────────────────
 
     async function addTask(listId) {
         const list = lists.find(l => l.id === listId);
         const listTasks = tasks.filter(t => t.listID === listId);
         const id = crypto.randomUUID();
         const newTask = {
-            id,
-            title: 'New Task',
-            description: '',
-            isCompleted: false,
-            originalCategory: list?.category || '',
-            color: list?.color || '',
-            listID: listId,
-            taskOrder: listTasks.length,
+            id, title: 'New Task', description: '', isCompleted: 0,
+            originalCategory: list?.category || '', color: list?.color || '',
+            listID: listId, taskOrder: listTasks.length,
         };
-
-        await fetch(`${API}/kanban/tasks`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(newTask),
-        });
-
-        setTasks(prev => [...prev, newTask]);
+        await sm.execute(
+            `INSERT INTO tasks (id, title, description, isCompleted, originalCategory, color, listID, taskOrder)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [id, newTask.title, '', 0, newTask.originalCategory, newTask.color, listId, newTask.taskOrder],
+            { serverMethod: 'POST', serverPath: '/api/kanban/tasks', serverBody: newTask }
+        );
         return id;
     }
 
     async function updateTask(taskId, changes) {
-        setTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...changes } : t));
-
         const task = tasks.find(t => t.id === taskId);
         const updated = { ...task, ...changes };
-
-        await fetch(`${API}/kanban/tasks/${taskId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(updated),
-        });
+        await sm.execute(
+            `UPDATE tasks SET title=?, description=?, isCompleted=?, listID=?, originalCategory=?, color=?, taskOrder=? WHERE id=?`,
+            [updated.title, updated.description, updated.isCompleted ? 1 : 0, updated.listID, updated.originalCategory, updated.color, updated.taskOrder, taskId],
+            { serverMethod: 'PUT', serverPath: `/api/kanban/tasks/${taskId}`, serverBody: updated }
+        );
     }
 
     async function deleteTask(taskId) {
-        setTasks(prev => prev.filter(t => t.id !== taskId));
-        await fetch(`${API}/kanban/tasks/${taskId}`, { method: 'DELETE' });
+        await sm.execute(`DELETE FROM tasks WHERE id = ?`, [taskId],
+            { serverMethod: 'DELETE', serverPath: `/api/kanban/tasks/${taskId}`, serverBody: {} }
+        );
     }
 
     async function reorderTasks(updates, targetListId, taskId) {
-        setTasks(prev => {
-            return prev.map(t => {
-                const update = updates.find(u => u.id === t.id);
-                return update ? { ...t, listID: update.listID, taskOrder: update.taskOrder } : t;
-            });
-        });
+        sm.runBatch(
+            updates.map(u => ({
+                sql: 'UPDATE tasks SET listID = ?, taskOrder = ? WHERE id = ?',
+                params: [u.listID, u.taskOrder, u.id],
+            }))
+        );
 
-        await fetch(`${API}/kanban/tasks/reorder`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ updates }),
+        await sm.execute('SELECT 1', [], {
+            serverMethod: 'PUT',
+            serverPath: '/api/kanban/tasks/reorder',
+            serverBody: { updates },
         });
     }
 

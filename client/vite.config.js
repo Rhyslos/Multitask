@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-// server configuration functions
+// configuration functions
 export default defineConfig({
   plugins: [react()],
   server: {
@@ -11,5 +11,12 @@ export default defineConfig({
         changeOrigin: true,
       },
     },
+    headers: {
+      'Cross-Origin-Embedder-Policy': 'require-corp',
+      'Cross-Origin-Opener-Policy': 'same-origin',
+    },
+  },
+  optimizeDeps: {
+    exclude: ['@sqlite.org/sqlite-wasm'],
   },
 });

@@ -1,15 +1,4 @@
-/**
- * useSync.jsx
- *
- * Bootstraps SyncManager and exposes:
- *   - sm          : SyncManager instance (null while loading)
- *   - online      : boolean — server is reachable
- *   - pending     : number  — ops waiting to flush
- *   - ready       : boolean — local DB is initialised
- *
- * Wrap your app with <SyncProvider> and consume with useSync().
- */
-import { createContext, useContext, useEffect, useState, useRef } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 import { SyncManager } from '../sync/syncManager';
 
 const SyncContext = createContext(null);
@@ -17,7 +6,6 @@ const SyncContext = createContext(null);
 export function SyncProvider({ children }) {
     const [sm, setSm] = useState(null);
     const [online, setOnline] = useState(navigator.onLine);
-    const [pending, setPending] = useState(0);
     const [ready, setReady] = useState(false);
 
     useEffect(() => {
@@ -25,16 +13,12 @@ export function SyncProvider({ children }) {
         SyncManager.getInstance().then(manager => {
             setSm(manager);
             setReady(true);
+            setOnline(manager.isOnline); // Set initial state
 
-            // Keep online/pending in sync
+            // Listen to the manager's heartbeat instead of the browser's Wi-Fi state
             unsub = manager.subscribe(() => {
-                setPending(manager.pendingCount());
+                setOnline(manager.isOnline);
             });
-
-            const onOnline = () => setOnline(true);
-            const onOffline = () => setOnline(false);
-            window.addEventListener('online', onOnline);
-            window.addEventListener('offline', onOffline);
         });
 
         return () => {
@@ -43,7 +27,7 @@ export function SyncProvider({ children }) {
     }, []);
 
     return (
-        <SyncContext.Provider value={{ sm, online, pending, ready }}>
+        <SyncContext.Provider value={{ sm, online, ready }}>
             {children}
         </SyncContext.Provider>
     );

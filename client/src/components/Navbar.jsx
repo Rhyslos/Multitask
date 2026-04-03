@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import HamburgerMenu from './HamburgerMenu';
+import { appName } from '../App';
 
 
 // Component
@@ -25,9 +26,10 @@ export default function Navbar() {
     return (
         <>
             <nav className="navbar">
+
                 <div className="navbar-brand" onClick={() => navigate('/dashboard')} style={{ cursor: 'pointer' }}>
                     <span className="navbar-logo">✦</span>
-                    <span className="navbar-name">Multitask - For Students!</span>
+                    <span className="navbar-name">{appName}</span>
                 </div>
 
                 {inWorkspace && (

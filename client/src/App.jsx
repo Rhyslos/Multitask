@@ -10,6 +10,8 @@ import Dashboard from './pages/Dashboard';
 import Kanban from './pages/Kanban';
 import Notation from './pages/Notation';
 
+export const appName = Object.freeze("Example App Name");
+
 function PrivateRoute({ children }) {
     const { user } = useAuth();
     return user ? children : <Navigate to="/login" replace />;
@@ -40,40 +42,3 @@ export default function App() {
         </SyncProvider>
     );
 }
-
-
-/**
- * ─────────────────────────────────────────────────────
- * Navbar.jsx — add SyncStatusBadge to navbar-right
- * ─────────────────────────────────────────────────────
- *
- * In your existing Navbar.jsx, import SyncStatusBadge and add it:
- *
- *   import SyncStatusBadge from './SyncStatusBadge';
- *
- *   // inside the .navbar-right div, before the username:
- *   <SyncStatusBadge />
- *
- * ─────────────────────────────────────────────────────
- * File / folder layout for the new files
- * ─────────────────────────────────────────────────────
- *
- *  src/
- *   sync/
- *     syncManager.js       ← syncManager.js  (new)
- *   hooks/
- *     useSync.jsx          ← useSync.jsx      (new)
- *     useAuth.jsx          ← replaces existing
- *     useKanban.jsx        ← replaces existing
- *     useTabs.jsx          ← replaces existing
- *     useWorkspaces.jsx    ← replaces existing
- *     useNotes.jsx         ← replaces existing
- *   components/
- *     SyncStatusBadge.jsx  ← SyncStatusBadge.jsx (new)
- *
- *  server/   (or root, wherever your .mjs files live)
- *   server.mjs             ← replaces existing
- *   api/
- *     syncAPI.mjs          ← syncAPI.mjs      (new)
- *     workspaceAPI.mjs     ← replaces existing
- */

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import { appName } from '../App';
 
 
 // Page
@@ -38,7 +39,7 @@ export default function Login() {
             <div className="auth-panel">
                 <div className="auth-brand">
                     <span className="auth-logo">✦</span>
-                    <span className="auth-brand-name">StudySpace</span>
+                    <span className="auth-brand-name">{appName}</span>
                 </div>
 
                 <div className="auth-header">

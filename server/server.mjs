@@ -20,14 +20,13 @@ export class KanbanServer {
         this.app.use(cors({ origin: ['http://localhost:5173', 'http://localhost:5174'] }));
         this.app.use(express.json({ limit: '10mb' }));
 
-        // Health check — client uses this to detect connectivity
         this.app.get('/api/health', (_req, res) => res.json({ ok: true }));
 
         this.app.use('/api/kanban', createKanbanRouter(this.db));
         this.app.use('/api/users', createUserRouter(this.db));
         this.app.use('/api/workspaces', createWorkspaceRouter(this.db));
         this.app.use('/api/notes', createNotesRouter(this.db));
-        this.app.use('/api/sync', createSyncRouter(this.db, this.app));
+        this.app.use('/api/sync', createSyncRouter(this.db));
     }
 
     start() {

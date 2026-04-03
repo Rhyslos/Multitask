@@ -1,223 +1,155 @@
-/**
- * syncManager.js
- *
- * Offline-first sync layer.
- *
- * Strategy:
- *   - Every write goes to the local sql.js SQLite DB immediately (optimistic).
- *   - If the server is reachable the same write is also sent to the server.
- *   - If the server is unreachable the write is recorded in `pending_ops`.
- *   - On reconnect (or on every periodic health-check) pending_ops are
- *     flushed to the server via POST /api/sync/flush.
- *   - On startup (or re-connect) the client pulls the latest server state
- *     via GET /api/sync/pull and merges it into the local DB.
- *
- * Usage (from a React hook):
- *   const sm = await SyncManager.getInstance();
- *   const result = await sm.query('SELECT * FROM tasks WHERE listID = ?', [id]);
- *   await sm.execute('INSERT INTO tasks (...) VALUES (?,...)', [...values], {
- *     serverMethod: 'POST',
- *     serverPath: '/api/kanban/tasks',
- *     serverBody: { ...taskObj },
- *   });
- */
+import DbWorker from './dbWorker.js?worker';
 
 const API = 'http://localhost:8080/api';
-const DB_STORAGE_KEY_PREFIX = 'studyspace_db_'; // + userId
 
-// ─── Schema (mirrors server db.mjs) ─────────────────────────────────────────
-
+// schema functions
 const SCHEMA_SQL = `
-  CREATE TABLE IF NOT EXISTS users (
-    id TEXT PRIMARY KEY,
-    username TEXT UNIQUE NOT NULL,
-    password_hash TEXT NOT NULL,
-    createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
-  CREATE TABLE IF NOT EXISTS categories (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    color TEXT NOT NULL,
-    userID TEXT NOT NULL
-  );
-  CREATE TABLE IF NOT EXISTS workspaces (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    userID TEXT NOT NULL,
-    categoryID TEXT,
-    createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
-  CREATE TABLE IF NOT EXISTS kanban_tabs (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL DEFAULT 'New Tab',
-    color TEXT NOT NULL DEFAULT '#888888',
-    tabOrder INTEGER NOT NULL DEFAULT 0,
-    isArchived INTEGER NOT NULL DEFAULT 0,
-    workspaceID TEXT NOT NULL
-  );
-  CREATE TABLE IF NOT EXISTS lists (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    category TEXT,
-    color TEXT,
-    direction TEXT,
-    columnIndex INTEGER NOT NULL DEFAULT 0,
-    workspaceID TEXT NOT NULL,
-    tabID TEXT
-  );
-  CREATE TABLE IF NOT EXISTS tasks (
-    id TEXT PRIMARY KEY,
-    title TEXT NOT NULL,
-    description TEXT,
-    isCompleted BOOLEAN,
-    originalCategory TEXT,
-    color TEXT,
-    listID TEXT NOT NULL,
-    taskOrder INTEGER NOT NULL DEFAULT 0
-  );
-  CREATE TABLE IF NOT EXISTS notes (
-    id TEXT PRIMARY KEY,
-    content TEXT NOT NULL DEFAULT '{}',
-    workspaceID TEXT UNIQUE NOT NULL,
-    updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
-  CREATE TABLE IF NOT EXISTS pending_ops (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    created_at INTEGER NOT NULL,
-    method TEXT NOT NULL,
-    path TEXT NOT NULL,
-    body TEXT NOT NULL
-  );
+  CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, createdAt DATETIME DEFAULT CURRENT_TIMESTAMP, updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP, isDeleted INTEGER DEFAULT 0);
+  CREATE TABLE IF NOT EXISTS categories (id TEXT PRIMARY KEY, name TEXT NOT NULL, color TEXT NOT NULL, userID TEXT NOT NULL, updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP, isDeleted INTEGER DEFAULT 0);
+  CREATE TABLE IF NOT EXISTS workspaces (id TEXT PRIMARY KEY, name TEXT NOT NULL, userID TEXT NOT NULL, categoryID TEXT, createdAt DATETIME DEFAULT CURRENT_TIMESTAMP, updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP, isDeleted INTEGER DEFAULT 0);
+  CREATE TABLE IF NOT EXISTS kanban_tabs (id TEXT PRIMARY KEY, name TEXT NOT NULL DEFAULT 'New Tab', color TEXT NOT NULL DEFAULT '#888888', tabOrder INTEGER NOT NULL DEFAULT 0, isArchived INTEGER NOT NULL DEFAULT 0, workspaceID TEXT NOT NULL, updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP, isDeleted INTEGER DEFAULT 0);
+  CREATE TABLE IF NOT EXISTS lists (id TEXT PRIMARY KEY, name TEXT NOT NULL, category TEXT, color TEXT, direction TEXT, columnIndex INTEGER NOT NULL DEFAULT 0, workspaceID TEXT NOT NULL, tabID TEXT, updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP, isDeleted INTEGER DEFAULT 0);
+  CREATE TABLE IF NOT EXISTS tasks (id TEXT PRIMARY KEY, title TEXT NOT NULL, description TEXT, isCompleted BOOLEAN, originalCategory TEXT, color TEXT, listID TEXT NOT NULL, taskOrder INTEGER NOT NULL DEFAULT 0, updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP, isDeleted INTEGER DEFAULT 0);
+  CREATE TABLE IF NOT EXISTS notes (id TEXT PRIMARY KEY, content TEXT NOT NULL DEFAULT '{}', workspaceID TEXT UNIQUE NOT NULL, updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP, isDeleted INTEGER DEFAULT 0);
 `;
 
-// ─── Singleton ───────────────────────────────────────────────────────────────
-
-let instance = null;
+let instancePromise = null;
 
 export class SyncManager {
+  
+  // initialization functions
   constructor() {
-    this._db = null;
-    this._SQL = null;
-    this._online = true;
+    this._worker = null;
+    this._online = navigator.onLine;
     this._userId = null;
     this._flushTimer = null;
-    this._listeners = new Set(); // () => void  — called when local DB changes
+    this._listeners = new Set();
+    this._listenersAttached = false;
+    this._msgId = 0;
+    this._pendingRequests = new Map();
+    
+    // The "Lock" that pauses queries until the DB file is initialized
+    this._dbReadyResolver = null;
+    this._dbReadyPromise = new Promise(res => { this._dbReadyResolver = res; });
   }
 
-  /** Always use this instead of `new SyncManager()` */
-  static async getInstance() {
-    if (!instance) {
-      instance = new SyncManager();
-      await instance._init();
+  get isOnline(){
+    return this._online;
+  }
+
+  _setOnline(status){
+    if(this._online !== status){
+      this._online = status;
+      this._notify();
     }
-    return instance;
   }
 
-  /** Reset the singleton (e.g. on logout) */
+  static getInstance() {
+    if (!instancePromise) {
+      instancePromise = (async () => {
+        const manager = new SyncManager();
+        await manager._init();
+        return manager;
+      })();
+    }
+    return instancePromise;
+  }
+
   static reset() {
-    if (instance) {
-      instance._stopFlushTimer();
-      instance._db?.close();
+    if (instancePromise) {
+      instancePromise.then(manager => {
+        manager._stopFlushTimer();
+        if (manager._worker) {
+          manager._worker.postMessage({ type: 'CLOSE', msgId: ++manager._msgId });
+          manager._worker.terminate();
+        }
+      });
     }
-    instance = null;
+    instancePromise = null;
   }
-
-  // ─── Initialisation ────────────────────────────────────────────────────────
 
   async _init() {
-    // Load sql.js from CDN
-    const initSqlJs = await this._loadSqlJs();
-    this._SQL = await initSqlJs({ locateFile: f => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/${f}` });
-
-    this._db = new this._SQL.Database();
-    this._db.run(SCHEMA_SQL);
-
-    // Restore persisted DB if available
-    this._restoreFromStorage();
-
-    // Listen for online/offline events
-    window.addEventListener('online', () => this._handleOnline());
-    window.addEventListener('offline', () => this._handleOffline());
-    this._online = navigator.onLine;
-
-    // Periodic health-check every 5 s
-    this._startFlushTimer();
-  }
-
-  _loadSqlJs() {
     return new Promise((resolve, reject) => {
-      if (window.initSqlJs) { resolve(window.initSqlJs); return; }
-      const s = document.createElement('script');
-      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/sql-wasm.js';
-      s.onload = () => resolve(window.initSqlJs);
-      s.onerror = reject;
-      document.head.appendChild(s);
+      this._worker = new DbWorker();
+
+      this._worker.onmessage = (event) => {
+        const { type, payload, msgId } = event.data;
+
+        // Route responses back to their specific awaiting Promises
+        if (this._pendingRequests.has(msgId)) {
+          const { res, rej } = this._pendingRequests.get(msgId);
+          this._pendingRequests.delete(msgId);
+          if (type === 'ERROR') rej(new Error(payload));
+          else res(payload);
+          return;
+        }
+
+        if (type === 'ERROR') {
+          console.error('[SyncManager Worker]', payload);
+        }
+      };
+
+      this._worker.onerror = (error) => reject(error);
+      
+      // Resolve instance creation immediately. Queries will wait for the _dbReadyPromise lock.
+      resolve(); 
     });
   }
 
-  // ─── Persistence (localStorage, base64) ───────────────────────────────────
-
-  _storageKey() {
-    return DB_STORAGE_KEY_PREFIX + (this._userId || 'anon');
-  }
-
-  _persistToStorage() {
-    try {
-      const data = this._db.export(); // Uint8Array
-      const b64 = btoa(String.fromCharCode(...data));
-      localStorage.setItem(this._storageKey(), b64);
-    } catch (e) {
-      console.warn('[SyncManager] persist failed:', e);
-    }
-  }
-
-  _restoreFromStorage() {
-    try {
-      const b64 = localStorage.getItem(this._storageKey());
-      if (!b64) return;
-      const binary = atob(b64);
-      const arr = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i);
-      this._db = new this._SQL.Database(arr);
-      // Re-run schema to add any new tables
-      this._db.run(SCHEMA_SQL);
-    } catch (e) {
-      console.warn('[SyncManager] restore failed, starting fresh:', e);
-      this._db = new this._SQL.Database();
-      this._db.run(SCHEMA_SQL);
-    }
-  }
-
-  // ─── User context ──────────────────────────────────────────────────────────
-
-  /** Call this after login so the DB key is user-specific */
-  setUser(userId) {
+  // user context functions
+  async setUser(userId) {
     if (this._userId === userId) return;
     this._userId = userId;
-    // Try to restore a saved DB for this user
-    this._restoreFromStorage();
+
+    // Reset the lock if a different user logs in
+    if (this._dbReadyResolver === null) {
+      this._dbReadyPromise = new Promise(res => { this._dbReadyResolver = res; });
+    }
+
+    try {
+      // 1. Tell worker to create/open this specific user's file
+      await this._execWorker('INIT', { dbName: `studyspace_${userId}` });
+      
+      // 2. Setup schema (bypassing the lock since we use _execWorker directly)
+      await this._execWorker('EXECUTE', { sql: SCHEMA_SQL });
+
+      if (!this._listenersAttached) {
+        this._setupNetworkListeners();
+        this._listenersAttached = true;
+      }
+      this._startFlushTimer();
+
+      // 3. UNLOCK! All paused React queries will now fire simultaneously
+      this._dbReadyResolver();
+      this._dbReadyResolver = null;
+
+      if (this._online) {
+        this.sync();
+      }
+    } catch (e) {
+      console.error('Failed to initialize user DB:', e);
+    }
   }
 
-  // ─── Online / Offline ──────────────────────────────────────────────────────
-
-  _handleOnline() {
-    this._online = true;
-    console.log('[SyncManager] Back online — flushing pending ops');
-    this.flushPending();
-    this.pullFromServer();
-  }
-
-  _handleOffline() {
-    this._online = false;
-    console.log('[SyncManager] Offline — writes will queue locally');
+  // network functions
+  _setupNetworkListeners() {
+    window.addEventListener('online', () => {
+      this._setOnline(true);
+      this.sync();
+    });
+    window.addEventListener('offline', () => {
+      this._setOnline(false);
+    });
   }
 
   _startFlushTimer() {
     this._flushTimer = setInterval(async () => {
       const reachable = await this._checkServer();
-      if (reachable && !this._online) this._handleOnline();
-      else if (reachable) {
-        this.flushPending();
+      if (reachable) {
+        this._setOnline(true);
+        this.sync();
+      } else {
+        this._setOnline(false);
       }
     }, 5000);
   }
@@ -235,195 +167,111 @@ export class SyncManager {
     }
   }
 
-  // ─── Change listeners ──────────────────────────────────────────────────────
-
+  // subscription functions
   subscribe(fn) {
     this._listeners.add(fn);
     return () => this._listeners.delete(fn);
   }
 
   _notify() {
-    if (!this._db) return;
-    this._persistToStorage();
     this._listeners.forEach(fn => fn());
   }
 
-  /**
-   * Run multiple SQL statements atomically in a single transaction.
-   * Used for bulk reorders where we want one server op but many local writes.
-   * Does NOT trigger a server call — pass serverOp separately if needed.
-   */
-  runBatch(statements) {
-    if (!this._db) return;
-    this._db.run('BEGIN');
-    try {
-      for (const { sql, params = [] } of statements) {
-        this._db.run(sql, params);
-      }
-      this._db.run('COMMIT');
-    } catch (e) {
-      this._db.run('ROLLBACK');
-      throw e;
-    }
-    this._notify();
+  // worker communication functions
+  _execWorker(type, payloadData) {
+    return new Promise((res, rej) => {
+      const msgId = ++this._msgId;
+      this._pendingRequests.set(msgId, { res, rej });
+      this._worker.postMessage({ type, msgId, ...payloadData });
+    });
   }
 
-  // ─── Core DB API ───────────────────────────────────────────────────────────
-
-  /**
-   * Read-only query. Returns array of plain objects.
-   * Returns [] safely if the DB is not yet ready.
-   */
-  query(sql, params = []) {
-    if (!this._db) return [];
-    const stmt = this._db.prepare(sql);
-    stmt.bind(params);
-    const rows = [];
-    while (stmt.step()) rows.push(stmt.getAsObject());
-    stmt.free();
-    return rows;
+  // query functions
+  async query(sql, params = []) {
+    await this._dbReadyPromise; // PAUSE if DB is not ready yet
+    return await this._execWorker('QUERY', { sql, params });
   }
 
-  /**
-   * Write to local DB. Optionally syncs to server.
-   *
-   * @param {string} sql - SQL statement
-   * @param {Array}  params
-   * @param {{ serverMethod?: string, serverPath?: string, serverBody?: object }} [serverOp]
-   */
-  async execute(sql, params = [], serverOp = null) {
-    if (!this._db) { console.warn('[SyncManager] execute() called before DB ready'); return; }
-    this._db.run(sql, params);
+  async execute(sql, params = []) {
+    await this._dbReadyPromise; // PAUSE if DB is not ready yet
+    await this._execWorker('EXECUTE', { sql, params });
     this._notify();
-
-    if (!serverOp) return;
 
     if (this._online) {
-      try {
-        const r = await fetch(`${API}${serverOp.serverPath}`, {
-          method: serverOp.serverMethod || 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(serverOp.serverBody ?? {}),
-          signal: AbortSignal.timeout(4000),
-        });
-        if (!r.ok) throw new Error(`Server ${r.status}`);
-        return await r.json();
-      } catch (e) {
-        console.warn('[SyncManager] Server write failed, queuing:', e.message);
-        this._online = false;
-        this._enqueuePending(serverOp);
-      }
-    } else {
-      this._enqueuePending(serverOp);
+      this.sync();
     }
   }
 
-  // ─── Pending queue ─────────────────────────────────────────────────────────
-
-  _enqueuePending({ serverMethod, serverPath, serverBody }) {
-    if (!this._db) return;
-    this._db.run(
-      `INSERT INTO pending_ops (created_at, method, path, body) VALUES (?, ?, ?, ?)`,
-      [Date.now(), serverMethod || 'POST', serverPath, JSON.stringify(serverBody ?? {})]
-    );
-    this._persistToStorage();
+  async runBatch(statements) {
+    await this._dbReadyPromise; // PAUSE if DB is not ready yet
+    await this._execWorker('BATCH', { statements });
+    this._notify();
   }
 
-  pendingCount() {
-    const rows = this.query('SELECT COUNT(*) as n FROM pending_ops');
-    return rows[0]?.n ?? 0;
-  }
+  // sync functions
+  async sync() {
+    await this._dbReadyPromise;
+    if (!this._online || !this._userId) return;
 
-  /**
-   * Flush all pending ops to the server in order.
-   * Called on reconnect or by timer.
-   */
-  async flushPending() {
-    const ops = this.query('SELECT * FROM pending_ops ORDER BY id ASC');
-    if (ops.length === 0) return;
+    const syncKey = `sync_time_${this._userId}`;
+    const lastSyncTime = localStorage.getItem(syncKey) || '1970-01-01 00:00:00';
+    const currentSyncTime = new Date().toISOString().replace('T', ' ').slice(0, 19);
 
-    console.log(`[SyncManager] Flushing ${ops.length} pending op(s)`);
+    const tables = ['categories', 'workspaces', 'kanban_tabs', 'lists', 'tasks', 'notes'];
+    const pushPayload = {};
+    let hasChanges = false;
 
-    // Send them to the batch endpoint
+    for (const table of tables) {
+      const changedRows = await this.query(`SELECT * FROM ${table} WHERE updatedAt > ?`, [lastSyncTime]);
+      if (changedRows.length > 0) {
+        pushPayload[table] = changedRows;
+        hasChanges = true;
+      }
+    }
+
     try {
-      const r = await fetch(`${API}/sync/flush`, {
+      const r = await fetch(`${API}/sync`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ops: ops.map(o => ({ method: o.method, path: o.path, body: JSON.parse(o.body) })) }),
+        body: JSON.stringify({ userID: this._userId, lastSync: lastSyncTime, clientChanges: pushPayload }),
         signal: AbortSignal.timeout(10000),
       });
-      if (r.ok) {
-        // Clear all pending ops that were just sent
-        this._db.run('DELETE FROM pending_ops WHERE id <= ?', [ops[ops.length - 1].id]);
-        this._persistToStorage();
-        console.log('[SyncManager] Flush complete');
-      }
+
+      if (!r.ok) throw new Error(`Sync failed: ${r.status}`);
+
+      const serverChanges = await r.json();
+      await this._mergeServerData(serverChanges);
+
+      localStorage.setItem(syncKey, currentSyncTime);
     } catch (e) {
-      console.warn('[SyncManager] Flush failed:', e.message);
-      this._online = false;
+      this._setOnline(false);
     }
   }
 
-  // ─── Pull from server ──────────────────────────────────────────────────────
+  async _mergeServerData(serverChanges) {
+    const statements = [];
 
-  /**
-   * Pull the full server state for a user and merge into local DB.
-   * Server returns { workspaces, categories, tabs, lists, tasks, notes }.
-   * Strategy: server wins for all records (last-write-wins by server timestamp).
-   */
-  async pullFromServer(userId) {
-    const uid = userId || this._userId;
-    if (!uid) return;
-    try {
-      const r = await fetch(`${API}/sync/pull?userID=${uid}`, { signal: AbortSignal.timeout(8000) });
-      if (!r.ok) return;
-      const data = await r.json();
-      this._mergeServerData(data);
-    } catch (e) {
-      console.warn('[SyncManager] Pull failed:', e.message);
+    if (serverChanges.categories) {
+      serverChanges.categories.forEach(c => statements.push({ sql: `INSERT OR REPLACE INTO categories (id, name, color, userID, updatedAt, isDeleted) VALUES (?,?,?,?,?,?)`, params: [c.id, c.name, c.color, c.userID, c.updatedAt, c.isDeleted] }));
     }
-  }
+    if (serverChanges.workspaces) {
+      serverChanges.workspaces.forEach(w => statements.push({ sql: `INSERT OR REPLACE INTO workspaces (id, name, userID, categoryID, createdAt, updatedAt, isDeleted) VALUES (?,?,?,?,?,?,?)`, params: [w.id, w.name, w.userID, w.categoryID, w.createdAt, w.updatedAt, w.isDeleted] }));
+    }
+    if (serverChanges.kanban_tabs) {
+      serverChanges.kanban_tabs.forEach(t => statements.push({ sql: `INSERT OR REPLACE INTO kanban_tabs (id, name, color, tabOrder, isArchived, workspaceID, updatedAt, isDeleted) VALUES (?,?,?,?,?,?,?,?)`, params: [t.id, t.name, t.color, t.tabOrder, t.isArchived, t.workspaceID, t.updatedAt, t.isDeleted] }));
+    }
+    if (serverChanges.lists) {
+      serverChanges.lists.forEach(l => statements.push({ sql: `INSERT OR REPLACE INTO lists (id, name, category, color, direction, columnIndex, workspaceID, tabID, updatedAt, isDeleted) VALUES (?,?,?,?,?,?,?,?,?,?)`, params: [l.id, l.name, l.category, l.color, l.direction, l.columnIndex, l.workspaceID, l.tabID, l.updatedAt, l.isDeleted] }));
+    }
+    if (serverChanges.tasks) {
+      serverChanges.tasks.forEach(t => statements.push({ sql: `INSERT OR REPLACE INTO tasks (id, title, description, isCompleted, originalCategory, color, listID, taskOrder, updatedAt, isDeleted) VALUES (?,?,?,?,?,?,?,?,?,?)`, params: [t.id, t.title, t.description, t.isCompleted ? 1 : 0, t.originalCategory, t.color, t.listID, t.taskOrder, t.updatedAt, t.isDeleted] }));
+    }
+    if (serverChanges.notes) {
+      serverChanges.notes.forEach(n => statements.push({ sql: `INSERT OR REPLACE INTO notes (id, content, workspaceID, updatedAt, isDeleted) VALUES (?,?,?,?,?)`, params: [n.id, n.content, n.workspaceID, n.updatedAt, n.isDeleted] }));
+    }
 
-  _mergeServerData({ workspaces = [], categories = [], tabs = [], lists = [], tasks = [], notes = [] }) {
-    if (!this._db) return;
-    // Upsert everything from the server — server wins
-    const upsertWorkspace = this._db.prepare(
-      `INSERT OR REPLACE INTO workspaces (id, name, userID, categoryID, createdAt) VALUES (?,?,?,?,?)`
-    );
-    workspaces.forEach(w => upsertWorkspace.run([w.id, w.name, w.userID, w.categoryID, w.createdAt]));
-    upsertWorkspace.free();
-
-    const upsertCategory = this._db.prepare(
-      `INSERT OR REPLACE INTO categories (id, name, color, userID) VALUES (?,?,?,?)`
-    );
-    categories.forEach(c => upsertCategory.run([c.id, c.name, c.color, c.userID]));
-    upsertCategory.free();
-
-    const upsertTab = this._db.prepare(
-      `INSERT OR REPLACE INTO kanban_tabs (id, name, color, tabOrder, isArchived, workspaceID) VALUES (?,?,?,?,?,?)`
-    );
-    tabs.forEach(t => upsertTab.run([t.id, t.name, t.color, t.tabOrder, t.isArchived, t.workspaceID]));
-    upsertTab.free();
-
-    const upsertList = this._db.prepare(
-      `INSERT OR REPLACE INTO lists (id, name, category, color, direction, columnIndex, workspaceID, tabID) VALUES (?,?,?,?,?,?,?,?)`
-    );
-    lists.forEach(l => upsertList.run([l.id, l.name, l.category, l.color, l.direction, l.columnIndex, l.workspaceID, l.tabID]));
-    upsertList.free();
-
-    const upsertTask = this._db.prepare(
-      `INSERT OR REPLACE INTO tasks (id, title, description, isCompleted, originalCategory, color, listID, taskOrder) VALUES (?,?,?,?,?,?,?,?)`
-    );
-    tasks.forEach(t => upsertTask.run([t.id, t.title, t.description, t.isCompleted ? 1 : 0, t.originalCategory, t.color, t.listID, t.taskOrder]));
-    upsertTask.free();
-
-    const upsertNote = this._db.prepare(
-      `INSERT OR REPLACE INTO notes (id, content, workspaceID, updatedAt) VALUES (?,?,?,?)`
-    );
-    notes.forEach(n => upsertNote.run([n.id, n.content, n.workspaceID, n.updatedAt]));
-    upsertNote.free();
-
-    this._notify();
-    console.log('[SyncManager] Merged server data');
+    if (statements.length > 0) {
+      await this.runBatch(statements);
+    }
   }
 }

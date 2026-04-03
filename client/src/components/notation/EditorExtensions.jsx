@@ -12,14 +12,11 @@ import CharacterCount from '@tiptap/extension-character-count';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
 import Placeholder from '@tiptap/extension-placeholder';
-import { FontWeight } from './FointWeight';
+import { FontWeight } from './FontWeight';
 
+// Editor configuration setup
 export const editorExtensions = [
-    // Exclude Link and Underline from StarterKit — we add our own configured versions below
-    StarterKit.configure({
-        link: false,
-        underline: false,
-    }),
+    StarterKit,
     TextAlign.configure({ types: ['heading', 'paragraph'] }),
     TextStyle,
     Color,

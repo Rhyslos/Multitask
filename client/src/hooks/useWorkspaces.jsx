@@ -1,31 +1,25 @@
-/**
- * useWorkspaces.jsx — offline-first
- */
 import { useState, useEffect, useCallback } from 'react';
 import { useSync } from './useSync';
 
-const API = 'http://localhost:8080/api';
-
 export function useWorkspaces(userID) {
-    const { sm, ready } = useSync();
+    const { sm } = useSync();
     const [workspaces, setWorkspaces] = useState([]);
     const [categories, setCategories] = useState([]);
     const [loading, setLoading] = useState(true);
 
-    const loadLocal = useCallback(() => {
+    const loadLocal = useCallback(async () => {
         if (!sm || !userID) return;
 
-        // Workspaces joined with category name/color
-        const ws = sm.query(`
+        const ws = await sm.query(`
             SELECT w.*, c.name as categoryName, c.color as categoryColor
             FROM workspaces w
             LEFT JOIN categories c ON w.categoryID = c.id
-            WHERE w.userID = ?
+            WHERE w.userID = ? AND w.isDeleted = 0
             ORDER BY w.createdAt DESC
         `, [userID]);
 
-        const cats = sm.query(
-            'SELECT * FROM categories WHERE userID = ? ORDER BY name ASC',
+        const cats = await sm.query(
+            'SELECT * FROM categories WHERE userID = ? AND isDeleted = 0 ORDER BY name ASC',
             [userID]
         );
 
@@ -41,28 +35,27 @@ export function useWorkspaces(userID) {
         return unsub;
     }, [sm, loadLocal]);
 
-    // Pull from server on mount
     useEffect(() => {
-        if (!ready || !userID || !sm) return;
-        sm.pullFromServer(userID);
-    }, [ready, userID, sm]);
+        if (!sm || !userID) return;
+        sm.sync(); // Trigger LWW sync instead of old pull
+    }, [sm, userID]);
 
     async function createWorkspace(name, categoryID) {
         const id = crypto.randomUUID();
         const createdAt = new Date().toISOString();
         await sm.execute(
             `INSERT INTO workspaces (id, name, userID, categoryID, createdAt) VALUES (?,?,?,?,?)`,
-            [id, name, userID, categoryID || null, createdAt],
-            { serverMethod: 'POST', serverPath: '/api/workspaces', serverBody: { name, userID, categoryID } }
+            [id, name, userID, categoryID || null, createdAt]
         );
-        // Return a synthetic workspace object (matches server shape)
         const cat = categories.find(c => c.id === categoryID);
         return { id, name, userID, categoryID, createdAt, categoryName: cat?.name, categoryColor: cat?.color };
     }
 
     async function deleteWorkspace(id) {
-        await sm.execute(`DELETE FROM workspaces WHERE id = ?`, [id],
-            { serverMethod: 'DELETE', serverPath: `/api/workspaces/${id}`, serverBody: {} }
+        // Soft delete and update timestamp
+        await sm.execute(
+            `UPDATE workspaces SET isDeleted = 1, updatedAt = CURRENT_TIMESTAMP WHERE id = ?`, 
+            [id]
         );
     }
 
@@ -70,8 +63,7 @@ export function useWorkspaces(userID) {
         const id = crypto.randomUUID();
         await sm.execute(
             `INSERT INTO categories (id, name, color, userID) VALUES (?,?,?,?)`,
-            [id, name, color, userID],
-            { serverMethod: 'POST', serverPath: '/api/workspaces/categories', serverBody: { name, color, userID } }
+            [id, name, color, userID]
         );
         return { id, name, color, userID };
     }

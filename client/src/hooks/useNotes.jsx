@@ -1,13 +1,8 @@
-/**
- * useNotes.jsx — offline-first
- */
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSync } from './useSync';
 
-const API = 'http://localhost:8080/api';
-
 export function useNotes(workspaceID) {
-    const { sm, ready } = useSync();
+    const { sm } = useSync();
     const [content, setContent] = useState(null);
     const [saved, setSaved] = useState(true);
     const [loading, setLoading] = useState(true);
@@ -16,8 +11,8 @@ export function useNotes(workspaceID) {
     useEffect(() => {
         if (!sm || !workspaceID) return;
 
-        const load = () => {
-            const rows = sm.query('SELECT * FROM notes WHERE workspaceID = ?', [workspaceID]);
+        const load = async () => {
+            const rows = await sm.query('SELECT * FROM notes WHERE workspaceID = ? AND isDeleted = 0', [workspaceID]);
             if (rows.length > 0) {
                 try {
                     const parsed = JSON.parse(rows[0].content);
@@ -35,18 +30,20 @@ export function useNotes(workspaceID) {
         return unsub;
     }, [sm, workspaceID]);
 
-    // Ensure a note row exists when workspace loads
     useEffect(() => {
-        if (!ready || !workspaceID || !sm) return;
-        const existing = sm.query('SELECT id FROM notes WHERE workspaceID = ?', [workspaceID]);
-        if (existing.length === 0) {
-            const id = crypto.randomUUID();
-            sm.execute(
-                `INSERT OR IGNORE INTO notes (id, content, workspaceID) VALUES (?,?,?)`,
-                [id, '{}', workspaceID]
-            );
-        }
-    }, [ready, workspaceID, sm]);
+        if (!sm || !workspaceID) return;
+        const checkSeed = async () => {
+            const existing = await sm.query('SELECT id FROM notes WHERE workspaceID = ?', [workspaceID]);
+            if (existing.length === 0) {
+                const id = crypto.randomUUID();
+                await sm.execute(
+                    `INSERT OR IGNORE INTO notes (id, content, workspaceID) VALUES (?,?,?)`,
+                    [id, '{}', workspaceID]
+                );
+            }
+        };
+        checkSeed();
+    }, [sm, workspaceID]);
 
     function handleUpdate(newContent) {
         setContent(newContent);
@@ -55,9 +52,8 @@ export function useNotes(workspaceID) {
         saveTimer.current = setTimeout(async () => {
             const contentStr = JSON.stringify(newContent);
             await sm.execute(
-                `UPDATE notes SET content = ?, updatedAt = datetime('now') WHERE workspaceID = ?`,
-                [contentStr, workspaceID],
-                { serverMethod: 'PUT', serverPath: `/api/notes/${workspaceID}`, serverBody: { content: newContent } }
+                `UPDATE notes SET content = ?, updatedAt = CURRENT_TIMESTAMP WHERE workspaceID = ?`,
+                [contentStr, workspaceID]
             );
             setSaved(true);
         }, 1000);

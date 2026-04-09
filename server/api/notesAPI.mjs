@@ -2,18 +2,21 @@ import { Router } from 'express';
 import crypto from 'crypto';
 import { catchAsync } from './apiUtils.mjs';
 
-
 // Routes
 export default function createNotesRouter(db) {
     const router = Router();
 
-
-    // Get or create note for workspace
-    router.get('/:workspaceID', catchAsync(async (req, res) => {
+    // Get the default note for a workspace
+    router.get('/workspace/:workspaceID', catchAsync(async (req, res) => {
         const { workspaceID } = req.params;
 
-        let note = await db.get('SELECT * FROM notes WHERE workspaceID = ?', workspaceID);
+        // Try to find the oldest/first note to act as the default tab
+        let note = await db.get(
+            'SELECT * FROM notes WHERE workspaceID = ? AND isDeleted = 0 ORDER BY createdAt ASC LIMIT 1', 
+            workspaceID
+        );
 
+        // If none exists, create the first one
         if (!note) {
             const id = crypto.randomUUID();
             await db.run(
@@ -26,20 +29,18 @@ export default function createNotesRouter(db) {
         return res.json({ note });
     }));
 
-
-    // Save note content
-    router.put('/:workspaceID', catchAsync(async (req, res) => {
-        const { workspaceID } = req.params;
+    // Save specific note content by Note ID (NOT Workspace ID)
+    router.put('/:noteID', catchAsync(async (req, res) => {
+        const { noteID } = req.params;
         const { content } = req.body;
 
         await db.run(
-            'UPDATE notes SET content = ?, updatedAt = CURRENT_TIMESTAMP WHERE workspaceID = ?',
-            JSON.stringify(content), workspaceID
+            'UPDATE notes SET content = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?',
+            JSON.stringify(content), noteID
         );
 
         return res.json({ message: 'Note saved.' });
     }));
-
 
     return router;
 }

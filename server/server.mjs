@@ -1,3 +1,5 @@
+import { WebSocketServer } from 'ws';
+import { setupWSConnection } from 'y-websocket/bin/utils';
 import express from 'express';
 import cors from 'cors';
 import { initializeDatabase } from './database/db.mjs';
@@ -6,6 +8,8 @@ import createWorkspaceRouter from './api/workspaceAPI.mjs';
 import createUserRouter from './api/userAPI.mjs';
 import createNotesRouter from './api/notesAPI.mjs';
 import createSyncRouter from './api/syncAPI.mjs';
+import createInvitesRouter from './api/invitesAPI.mjs';
+import createNetworkingRouter from './modules/networking.mjs';
 
 export class KanbanServer {
     constructor() {
@@ -27,11 +31,20 @@ export class KanbanServer {
         this.app.use('/api/workspaces', createWorkspaceRouter(this.db));
         this.app.use('/api/notes', createNotesRouter(this.db));
         this.app.use('/api/sync', createSyncRouter(this.db));
+        this.app.use('/api/invites', createInvitesRouter(this.db));
+        this.app.use('/api/network', createNetworkingRouter());
     }
 
     start() {
-        this.app.listen(this.port, () => {
+        const server = this.app.listen(this.port, () => {
             console.log(`Backend server running on http://localhost:${this.port}`);
+        });
+
+        const wss = new WebSocketServer({ server });
+
+        wss.on('connection', (conn, req) => {
+            console.log(`[YJS] Client connected to room: ${req.url}`);
+            setupWSConnection(conn, req, { gc: true });
         });
     }
 }

@@ -7,10 +7,16 @@ const SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, createdAt DATETIME DEFAULT CURRENT_TIMESTAMP, updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP, isDeleted INTEGER DEFAULT 0);
   CREATE TABLE IF NOT EXISTS categories (id TEXT PRIMARY KEY, name TEXT NOT NULL, color TEXT NOT NULL, userID TEXT NOT NULL, updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP, isDeleted INTEGER DEFAULT 0);
   CREATE TABLE IF NOT EXISTS workspaces (id TEXT PRIMARY KEY, name TEXT NOT NULL, userID TEXT NOT NULL, categoryID TEXT, createdAt DATETIME DEFAULT CURRENT_TIMESTAMP, updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP, isDeleted INTEGER DEFAULT 0);
+  
+  CREATE TABLE IF NOT EXISTS workspace_members (id TEXT PRIMARY KEY, workspaceID TEXT NOT NULL, userID TEXT NOT NULL, role TEXT DEFAULT 'editor', updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP, isDeleted INTEGER DEFAULT 0);
+  
   CREATE TABLE IF NOT EXISTS kanban_tabs (id TEXT PRIMARY KEY, name TEXT NOT NULL DEFAULT 'New Tab', color TEXT NOT NULL DEFAULT '#888888', tabOrder INTEGER NOT NULL DEFAULT 0, isArchived INTEGER NOT NULL DEFAULT 0, workspaceID TEXT NOT NULL, updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP, isDeleted INTEGER DEFAULT 0);
   CREATE TABLE IF NOT EXISTS lists (id TEXT PRIMARY KEY, name TEXT NOT NULL, category TEXT, color TEXT, direction TEXT, columnIndex INTEGER NOT NULL DEFAULT 0, workspaceID TEXT NOT NULL, tabID TEXT, updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP, isDeleted INTEGER DEFAULT 0);
   CREATE TABLE IF NOT EXISTS tasks (id TEXT PRIMARY KEY, title TEXT NOT NULL, description TEXT, isCompleted BOOLEAN, originalCategory TEXT, color TEXT, listID TEXT NOT NULL, taskOrder INTEGER NOT NULL DEFAULT 0, updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP, isDeleted INTEGER DEFAULT 0);
   CREATE TABLE IF NOT EXISTS notes (id TEXT PRIMARY KEY, content TEXT NOT NULL DEFAULT '{}', workspaceID TEXT UNIQUE NOT NULL, updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP, isDeleted INTEGER DEFAULT 0);
+
+  CREATE INDEX IF NOT EXISTS idx_workspace_members_user_ws ON workspace_members(userID, workspaceID);
+  CREATE INDEX IF NOT EXISTS idx_workspace_members_ws ON workspace_members(workspaceID);
 `;
 
 let instancePromise = null;
@@ -27,6 +33,9 @@ export class SyncManager {
     this._listenersAttached = false;
     this._msgId = 0;
     this._pendingRequests = new Map();
+
+    this._syncing = false;
+    this._syncDebounceTimer = null;
     
     // The "Lock" that pauses queries until the DB file is initialized
     this._dbReadyResolver = null;
@@ -144,15 +153,26 @@ export class SyncManager {
 
   _startFlushTimer() {
     this._flushTimer = setInterval(async () => {
-      const reachable = await this._checkServer();
-      if (reachable) {
-        this._setOnline(true);
-        this.sync();
-      } else {
-        this._setOnline(false);
-      }
-    }, 5000);
-  }
+        const reachable = await this._checkServer();
+        if (reachable) {
+            this._setOnline(true);
+            // Only push if there are actual local changes since last sync.
+            // This prevents the timer from broadcasting to coworkers
+            // every 2 seconds even when nothing has changed.
+            const syncKey = `sync_time_${this._userId}`;
+            const lastSyncTime = localStorage.getItem(syncKey) || '1970-01-01 00:00:00';
+            const tables = ['categories', 'workspaces', 'kanban_tabs', 'lists', 'tasks', 'notes'];
+            let hasChanges = false;
+            for (const table of tables) {
+                const rows = await this.query(`SELECT id FROM ${table} WHERE updatedAt > ? LIMIT 1`, [lastSyncTime]);
+                if (rows.length > 0) { hasChanges = true; break; }
+            }
+            if (hasChanges) this.sync();
+        } else {
+            this._setOnline(false);
+        }
+    }, 2000);
+}
 
   _stopFlushTimer() {
     if (this._flushTimer) clearInterval(this._flushTimer);
@@ -210,41 +230,92 @@ export class SyncManager {
 
   // sync functions
   async sync() {
-    await this._dbReadyPromise;
-    if (!this._online || !this._userId) return;
+    if (this._syncing || !this._online || !this._userId) return;
 
-    const syncKey = `sync_time_${this._userId}`;
-    const lastSyncTime = localStorage.getItem(syncKey) || '1970-01-01 00:00:00';
-    const currentSyncTime = new Date().toISOString().replace('T', ' ').slice(0, 19);
+    clearTimeout(this._syncDebounceTimer);
 
-    const tables = ['categories', 'workspaces', 'kanban_tabs', 'lists', 'tasks', 'notes'];
-    const pushPayload = {};
-    let hasChanges = false;
+    this._syncDebounceTimer = setTimeout(async () => {
+      try {
+        this._syncing = true;
+        await this._dbReadyPromise;
 
-    for (const table of tables) {
-      const changedRows = await this.query(`SELECT * FROM ${table} WHERE updatedAt > ?`, [lastSyncTime]);
-      if (changedRows.length > 0) {
-        pushPayload[table] = changedRows;
-        hasChanges = true;
+        const syncKey = `sync_time_${this._userId}`;
+        const lastSyncTime = localStorage.getItem(syncKey) || '1970-01-01 00:00:00';
+
+        const tables = ['categories', 'workspaces', 'kanban_tabs', 'lists', 'tasks', 'notes'];
+        const pushPayload = {};
+
+        for (const table of tables) {
+          const changedRows = await this.query(`SELECT * FROM ${table} WHERE updatedAt > ?`, [lastSyncTime]);
+          if (changedRows.length > 0) {
+            pushPayload[table] = changedRows;
+          }
+        }
+
+        // Snapshot time AFTER collecting rows but BEFORE the fetch.
+        // Any write that arrives after this point will have updatedAt > flightTime
+        // and will be caught by the follow-up sync triggered below.
+        const flightTime = new Date().toISOString().replace('T', ' ').slice(0, 19);
+
+        const r = await fetch(`${API}/sync`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userID: this._userId, lastSync: lastSyncTime, clientChanges: pushPayload }),
+          signal: AbortSignal.timeout(5000),
+        });
+
+        if (!r.ok) throw new Error(`Sync failed: ${r.status}`);
+
+        const serverChanges = await r.json();
+        await this._mergeServerData(serverChanges);
+
+        // Advance cursor to flightTime only — writes after the snapshot are still
+        // > flightTime and will be included in the next sync.
+        localStorage.setItem(syncKey, flightTime);
+        this._setOnline(true);
+
+        // If new local writes landed while the fetch was in-flight, sync again
+        // immediately so they aren't stranded until the 2s timer fires.
+        let hasUnsynced = false;
+        for (const table of tables) {
+          const rows = await this.query(`SELECT id FROM ${table} WHERE updatedAt > ? LIMIT 1`, [flightTime]);
+          if (rows.length > 0) { hasUnsynced = true; break; }
+        }
+        if (hasUnsynced) {
+          this._syncing = false; // release lock before re-triggering
+          this.sync();
+          return;
+        }
+      } catch (e) {
+        this._setOnline(false);
+      } finally {
+        this._syncing = false;
       }
-    }
+    }, 300);
+  }
 
+  // Pure pull triggered by SSE. Skips the debounce and the _syncing guard
+  // because we're not pushing anything — there's no risk of broadcast loops.
+  async syncNow() {
+    if (!this._online || !this._userId) return;
     try {
-      const r = await fetch(`${API}/sync`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userID: this._userId, lastSync: lastSyncTime, clientChanges: pushPayload }),
-        signal: AbortSignal.timeout(10000),
-      });
+      await this._dbReadyPromise;
+      const syncKey = `sync_time_${this._userId}`;
+      const lastSyncTime = localStorage.getItem(syncKey) || '1970-01-01 00:00:00';
+      const currentSyncTime = new Date().toISOString().replace('T', ' ').slice(0, 19);
 
-      if (!r.ok) throw new Error(`Sync failed: ${r.status}`);
+      const r = await fetch(
+        `${API}/sync?userID=${encodeURIComponent(this._userId)}&lastSync=${encodeURIComponent(lastSyncTime)}`,
+        { signal: AbortSignal.timeout(5000) }
+      );
+      if (!r.ok) throw new Error(`syncNow failed: ${r.status}`);
 
       const serverChanges = await r.json();
       await this._mergeServerData(serverChanges);
-
       localStorage.setItem(syncKey, currentSyncTime);
+      this._setOnline(true);
     } catch (e) {
-      this._setOnline(false);
+      console.warn('[SyncManager] syncNow failed:', e.message);
     }
   }
 

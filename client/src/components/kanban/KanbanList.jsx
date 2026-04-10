@@ -1,13 +1,28 @@
-import React, { useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import KanbanTask from './KanbanTask';
 
-
-// Component
+// Renders a single list and the tasks inside it.
+// Receives only its own list object and its own tasks — no awareness of
+// columns, other lists, or the full task array.
 export default function KanbanList({
-    list, tasks, categories, isFocused, dragging, insertionPoint,
-    onUpdate, onDelete, onAddTask, onUpdateTask, onDeleteTask,
-    onStartDrag, onOpenTask, onFocusClear, registerList, registerTask,
-    registerTaskElement, registerListElement
+    list,
+    tasks,
+    categories,
+    isFocused,
+    dragging,
+    insertionPoint,
+    onUpdate,
+    onDelete,
+    onAddTask,
+    onUpdateTask,
+    onDeleteTask,
+    onStartDrag,
+    onOpenTask,
+    onFocusClear,
+    registerList,
+    registerTask,
+    registerTaskElement,
+    registerListElement,
 }) {
     const nameRef = useRef(null);
     const listRef = useRef(null);
@@ -48,10 +63,8 @@ export default function KanbanList({
     }
 
     const categoryData = categories.find(c => c.name === list.category);
-
-    const showInsertionAt = insertionPoint?.listId === list.id
-        ? insertionPoint.insertIndex
-        : null;
+    const sortedTasks = [...tasks].sort((a, b) => a.taskOrder - b.taskOrder);
+    const insertionIndex = insertionPoint?.listId === list.id ? insertionPoint.insertIndex : null;
 
     return (
         <div className="kanban-list" ref={listRef}>
@@ -76,15 +89,15 @@ export default function KanbanList({
             </div>
 
             <div className="kanban-task-container">
-                {tasks.map((task, index) => (
-                    <React.Fragment key={task.id}>
-                        {showInsertionAt === index && (
+                {sortedTasks.map((task, index) => (
+                    <div key={task.id}>
+                        {insertionIndex === index && (
                             <div className="kanban-insertion-indicator" />
                         )}
                         <KanbanTask
                             task={task}
                             categories={categories}
-                            dragging={dragging === task.id}
+                            isDragging={dragging === task.id}
                             onUpdate={changes => onUpdateTask(task.id, changes)}
                             onDelete={() => onDeleteTask(task.id)}
                             onStartDrag={onStartDrag}
@@ -92,9 +105,9 @@ export default function KanbanList({
                             registerTask={registerTask}
                             registerElement={registerTaskElement}
                         />
-                    </React.Fragment>
+                    </div>
                 ))}
-                {showInsertionAt === tasks.length && (
+                {insertionIndex === sortedTasks.length && (
                     <div className="kanban-insertion-indicator" />
                 )}
             </div>

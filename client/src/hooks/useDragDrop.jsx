@@ -1,7 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 
-
-// Hook
 export function useDragDrop({ tasks, onReorder, onGhostDrop }) {
     const [dragging, setDragging] = useState(null);
     const [cloneMeta, setCloneMeta] = useState(null);
@@ -20,9 +18,12 @@ export function useDragDrop({ tasks, onReorder, onGhostDrop }) {
     const targetTiltRef = useRef(0);
     const rafRef = useRef(null);
 
+    // FIX 2: Prevent Stale Closures by wrapping callbacks in refs
     const onGhostDropRef = useRef(onGhostDrop);
+    const onReorderRef = useRef(onReorder);
+    
     useEffect(() => { onGhostDropRef.current = onGhostDrop; }, [onGhostDrop]);
-
+    useEffect(() => { onReorderRef.current = onReorder; }, [onReorder]);
     useEffect(() => { tasksRef.current = tasks; }, [tasks]);
 
     function registerList(listId, el) {
@@ -42,37 +43,6 @@ export function useDragDrop({ tasks, onReorder, onGhostDrop }) {
 
     function registerCloneOuter(el) { cloneOuterRef.current = el; }
     function registerCloneInner(el) { cloneInnerRef.current = el; }
-
-    function startDrag(e, task, element) {
-        if (e.button !== 0) return;
-        e.preventDefault();
-
-        const rect = element.getBoundingClientRect();
-        dragOffset.current = {
-            x: e.clientX - rect.left,
-            y: e.clientY - rect.top,
-        };
-
-        lastPos.current = { x: e.clientX, y: e.clientY };
-        tiltRef.current = 0;
-        targetTiltRef.current = 0;
-
-        const x = e.clientX - dragOffset.current.x;
-        const y = e.clientY - dragOffset.current.y;
-
-        setCloneMeta({ width: rect.width, height: rect.height });
-        draggingRef.current = task;
-        setDragging(task.id);
-
-        requestAnimationFrame(() => {
-            if (cloneOuterRef.current) {
-                cloneOuterRef.current.style.transform = `translate(${x}px, ${y}px)`;
-            }
-            if (cloneInnerRef.current) {
-                cloneInnerRef.current.style.transform = `scale(1.08) rotate(0deg)`;
-            }
-        });
-    }
 
     const onMouseMove = useCallback((e) => {
         if (!draggingRef.current) return;
@@ -98,7 +68,13 @@ export function useDragDrop({ tasks, onReorder, onGhostDrop }) {
         });
 
         const point = getInsertionPoint(e.clientX, e.clientY, draggingRef.current.id);
-        setInsertionPoint(point);
+        
+        // FIX 1: Stop the State Spam! Only trigger a React re-render if the insertion index actually changed.
+        setInsertionPoint(prev => {
+            if (!prev && !point) return prev;
+            if (prev && point && prev.listId === point.listId && prev.insertIndex === point.insertIndex) return prev;
+            return point;
+        });
     }, []);
 
     const onMouseUp = useCallback((e) => {
@@ -129,16 +105,46 @@ export function useDragDrop({ tasks, onReorder, onGhostDrop }) {
         setInsertionPoint(null);
         tiltRef.current = 0;
         targetTiltRef.current = 0;
-    }, []);
 
-    useEffect(() => {
+        // FIX 3: Clean up event listeners immediately when the drag finishes
+        window.removeEventListener('mousemove', onMouseMove);
+        window.removeEventListener('mouseup', onMouseUp);
+    }, [onMouseMove]);
+
+    function startDrag(e, task, element) {
+        if (e.button !== 0) return;
+        e.preventDefault();
+
+        const rect = element.getBoundingClientRect();
+        dragOffset.current = {
+            x: e.clientX - rect.left,
+            y: e.clientY - rect.top,
+        };
+
+        lastPos.current = { x: e.clientX, y: e.clientY };
+        tiltRef.current = 0;
+        targetTiltRef.current = 0;
+
+        const x = e.clientX - dragOffset.current.x;
+        const y = e.clientY - dragOffset.current.y;
+
+        setCloneMeta({ width: rect.width, height: rect.height });
+        draggingRef.current = task;
+        setDragging(task.id);
+
+        requestAnimationFrame(() => {
+            if (cloneOuterRef.current) {
+                cloneOuterRef.current.style.transform = `translate(${x}px, ${y}px)`;
+            }
+            if (cloneInnerRef.current) {
+                cloneInnerRef.current.style.transform = `scale(1.08) rotate(0deg)`;
+            }
+        });
+
+        // FIX 3: Only listen to the window when actively dragging
         window.addEventListener('mousemove', onMouseMove);
         window.addEventListener('mouseup', onMouseUp);
-        return () => {
-            window.removeEventListener('mousemove', onMouseMove);
-            window.removeEventListener('mouseup', onMouseUp);
-        };
-    }, [onMouseMove, onMouseUp]);
+    }
 
     function getInsertionPoint(cx, cy, draggedId) {
         let targetListId = null;
@@ -179,22 +185,15 @@ export function useDragDrop({ tasks, onReorder, onGhostDrop }) {
         const newOrder = [...listTasks];
         newOrder.splice(insertIndex, 0, task);
 
-        const updates = newOrder.map((t, i) => ({
-            id: t.id,
-            listID: listId,
-            taskOrder: i,
-        }));
+        const updates = newOrder
+            .map((t, i) => ({ id: t.id, listID: listId, taskOrder: i }))
+            .filter(u => {
+                const original = tasksRef.current.find(t => t.id === u.id);
+                return !original || original.listID !== u.listID || original.taskOrder !== u.taskOrder;
+            });
 
-        const otherTasks = tasksRef.current.filter(
-            t => t.listID !== listId && t.id !== task.id
-        );
-
-        const allUpdates = [
-            ...otherTasks.map(t => ({ id: t.id, listID: t.listID, taskOrder: t.taskOrder })),
-            ...updates,
-        ];
-
-        onReorder(allUpdates, listId, task.id);
+        // Pulls the freshest function from the ref instead of the stale closure
+        onReorderRef.current?.(updates);
     }
 
     return {

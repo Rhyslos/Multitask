@@ -1,3 +1,4 @@
+// user functions
 import { useState, useEffect, useCallback } from 'react';
 import { useSync } from './useSync';
 
@@ -9,12 +10,31 @@ export function useTabs(workspaceID) {
 
     const loadLocal = useCallback(async () => {
         if (!sm || !workspaceID) return;
-        const fetched = await sm.query(
+        
+        let fetched = await sm.query(
             'SELECT * FROM kanban_tabs WHERE workspaceID = ? AND isArchived = 0 AND isDeleted = 0 ORDER BY tabOrder ASC',
             [workspaceID]
         );
+
+        if (fetched.length === 0) {
+            const id = crypto.randomUUID();
+            await sm.execute(
+                `INSERT OR IGNORE INTO kanban_tabs (id, name, color, tabOrder, isArchived, workspaceID) VALUES (?,?,?,?,?,?)`,
+                [id, 'Main', '#6c8ebf', 0, 0, workspaceID]
+            );
+            fetched = await sm.query(
+                'SELECT * FROM kanban_tabs WHERE workspaceID = ? AND isArchived = 0 AND isDeleted = 0 ORDER BY tabOrder ASC',
+                [workspaceID]
+            );
+        }
+
         setTabs(fetched);
-        if (fetched.length > 0 && !activeTabId) setActiveTabId(fetched[0].id);
+        
+        setActiveTabId(currentActiveId => {
+            if (fetched.length > 0 && !currentActiveId) return fetched[0].id;
+            return currentActiveId;
+        });
+        
         setLoading(false);
     }, [sm, workspaceID]);
 
@@ -24,24 +44,6 @@ export function useTabs(workspaceID) {
         const unsub = sm.subscribe(loadLocal);
         return unsub;
     }, [sm, loadLocal]);
-
-    useEffect(() => {
-        if (!sm || !workspaceID) return;
-        const checkSeed = async () => {
-            const existing = await sm.query(
-                'SELECT * FROM kanban_tabs WHERE workspaceID = ? AND isArchived = 0 AND isDeleted = 0',
-                [workspaceID]
-            );
-            if (existing.length === 0) {
-                const id = crypto.randomUUID();
-                await sm.execute(
-                    `INSERT OR IGNORE INTO kanban_tabs (id, name, color, tabOrder, isArchived, workspaceID) VALUES (?,?,?,?,?,?)`,
-                    [id, 'Main', '#6c8ebf', 0, 0, workspaceID]
-                );
-            }
-        };
-        checkSeed();
-    }, [sm, workspaceID]);
 
     async function addTab() {
         const id = crypto.randomUUID();

@@ -39,6 +39,8 @@ export function SyncProvider({ children }) {
         es.onmessage = (event) => {
             const data = JSON.parse(event.data);
 
+            // TODO: Debounce / bytte sorteringsmetode / Få sync-operasjoner til å skje i riktig rekkefølge
+
             if (data.type === 'kanban_updated') {
                 // syncNow() is a debounce-free pure pull — no push, no broadcast loop
                 sm.syncNow();

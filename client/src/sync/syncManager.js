@@ -126,6 +126,7 @@ export class SyncManager {
             if (reachable) {
                 this._setOnline(true);
                 const syncKey = `sync_time_${this._userId}`;
+                
                 // Overlap flush check by 2 seconds
                 let safeTime = localStorage.getItem(syncKey) || '1970-01-01 00:00:00';
                 if (safeTime !== '1970-01-01 00:00:00') {

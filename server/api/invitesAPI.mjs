@@ -22,10 +22,20 @@ export default function createInvitesRouter(db) {
         if (existing) return res.status(400).json({ error: 'Invite already pending' });
 
         const id = crypto.randomUUID();
-        await db.run(
-            'INSERT INTO invitations (id, workspaceID, senderID, receiverEmail) VALUES (?, ?, ?, ?)',
-            id, workspaceID, senderID, receiverEmail
-        );
+        
+        try {
+            await db.run(
+                'INSERT INTO invitations (id, workspaceID, senderID, receiverEmail) VALUES (?, ?, ?, ?)',
+                id, workspaceID, senderID, receiverEmail
+            );
+        } catch (err) {
+            if (err.message.includes('FOREIGN KEY')) {
+                return res.status(400).json({ 
+                    error: 'Sync pending: This workspace has not been fully saved to the server yet. Please wait a moment for the sync to finish before inviting members.' 
+                });
+            }
+            throw err;
+        }
 
         const updatedInvites = await db.all(`
             SELECT i.id, i.workspaceID, i.senderID, i.receiverEmail, i.status, 

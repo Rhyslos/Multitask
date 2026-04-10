@@ -1,17 +1,18 @@
-import { useState, useRef, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
-import { useKanban } from '../hooks/useKanban';
-import { useTabs } from '../hooks/useTabs';
-import { useWorkspaces } from '../hooks/useWorkspaces';
-import { useAuth } from '../hooks/useAuth';
-import { useDragDrop } from '../hooks/useDragDrop';
-import { useFlipAnimation } from '../hooks/useFlipAnimation';
-import Navbar from '../components/Navbar';
-import KanbanSubbar from '../components/subbar/KanbanSubbar';
-import KanbanColumn from '../components/kanban/KanbanColumn';
-import KanbanTask from '../components/kanban/KanbanTask';
-import TaskModal from '../components/kanban/TaskModal';
-
+import { useState, useRef, useEffect, useMemo } from "react";
+import { useParams } from "react-router-dom";
+import { useColumns } from "../hooks/useColumns";
+import { useLists } from "../hooks/useLists";
+import { useTasks } from "../hooks/useTasks";
+import { useTabs } from "../hooks/useTabs";
+import { useWorkspaces } from "../hooks/useWorkspaces";
+import { useAuth } from "../hooks/useAuth";
+import { useDragDrop } from "../hooks/useDragDrop";
+import { useFlipAnimation } from "../hooks/useFlipAnimation";
+import Navbar from "../components/Navbar";
+import KanbanSubbar from "../components/subbar/KanbanSubbar";
+import KanbanColumn from "../components/kanban/KanbanColumn";
+import KanbanTask from "../components/kanban/KanbanTask";
+import TaskModal from "../components/kanban/TaskModal";
 
 // Page
 export default function Kanban() {
@@ -19,20 +20,43 @@ export default function Kanban() {
     const { user } = useAuth();
     const { categories } = useWorkspaces(user?.id);
 
-    const { tabs, activeTabId, setActiveTabId, addTab, updateTab, archiveTab } = useTabs(workspaceID);
+    const { tabs, activeTabId, setActiveTabId, addTab, updateTab, archiveTab } =
+        useTabs(workspaceID);
 
-    const { lists, tasks, loading, removingIds, addList, updateList, deleteList, addTask, updateTask, deleteTask, reorderTasks, getColumnId } = useKanban(workspaceID, activeTabId);
+    // --- Data layer ---
+    // Each hook is scoped to the correct level of the hierarchy.
+    // Columns own their ID. Lists are fetched by columnIDs. Tasks by listIDs.
+    // The page derives the ID arrays so hooks always get a stable reference.
 
+    const { columns, addColumn, deleteColumn } =
+        useColumns(workspaceID, activeTabId);
+
+    const columnIDs = useMemo(
+        () => columns.map(c => c.id), 
+        [columns.map(c => c.id).join(',')]
+    );
+    const { lists, addList, updateList, deleteList } = useLists(columnIDs);
+
+    const listIDs = useMemo(
+        () => lists.map(l => l.id), 
+        [lists.map(l => l.id).join(',')]
+    );
+
+    const { tasks, addTask, updateTask, deleteTask, reorderTasks } =
+        useTasks(listIDs);
+
+    // --- UI state ---
     const [activeTask, setActiveTask] = useState(null);
     const [focusedListId, setFocusedListId] = useState(null);
 
     const topbarRef = useRef(null);
     const boardRef = useRef(null);
-    const columnCountRef = useRef(0);
 
+    // --- Animations ---
     const { registerElement: registerTaskElement } = useFlipAnimation(tasks);
     const { registerElement: registerListElement } = useFlipAnimation(lists);
 
+    // --- Drag and drop ---
     const {
         dragging,
         cloneMeta,
@@ -47,44 +71,31 @@ export default function Kanban() {
         tasks,
         onReorder: reorderTasks,
         onGhostDrop: async (key, task) => {
-            if (key === 'new-column') {
-                const id = await addList(columnCountRef.current, workspaceID);
-                reorderTasks(
-                    [{ id: task.id, listID: id, taskOrder: 0 }],
-                    id,
-                    task.id
-                );
-            } else {
-                const colIndex = parseInt(key.replace('ghost-col-', ''));
-                const id = await addList(colIndex, workspaceID);
-                reorderTasks(
-                    [{ id: task.id, listID: id, taskOrder: 0 }],
-                    id,
-                    task.id
-                );
-            }
+            // A task was dropped onto a ghost target — create a new column
+            // with one list and move the task into it.
+            const isNewColumn = key === "new-column";
+            const targetIndex = isNewColumn
+                ? columns.length
+                : parseInt(key.replace("ghost-col-", ""));
+
+            const columnID = await addColumn(targetIndex);
+            if (!columnID) return;
+
+            const listID = await addList(columnID, workspaceID, activeTabId);
+            if (!listID) return;
+
+            reorderTasks([{ id: task.id, listID, taskOrder: 0 }]);
         },
     });
 
     const isDragging = !!dragging;
     const draggingTask = tasks.find(t => t.id === dragging);
 
-    const columnCount = lists.length > 0
-        ? Math.max(...lists.map(l => l.columnIndex)) + 1
-        : 0;
-
+    // --- Layout ---
+    // Column count comes from the actual columns array, not derived from lists.
+    const columnCount = columns.length;
     const plusButtonCount = columnCount + 1;
-
-    useEffect(() => { columnCountRef.current = columnCount; }, [columnCount]);
-
-    async function handleAddList(columnIndex) {
-        const id = await addList(columnIndex, workspaceID);
-        setFocusedListId(id);
-    }
-
-    function getListsInColumn(colIndex) {
-        return lists.filter(l => l.columnIndex === colIndex);
-    }
+    const boardInnerWidth = columnCount * (300 + 16) + 24 + (isDragging ? 316 : 0);
 
     function handleBoardScroll() {
         if (topbarRef.current && boardRef.current) {
@@ -92,7 +103,58 @@ export default function Kanban() {
         }
     }
 
-    const boardInnerWidth = (columnCount * (300 + 16)) + 24 + (isDragging ? 316 : 0);
+    // Clicking a + button at position i:
+    //   - If a column already exists at that index → add a list into it
+    //   - If no column exists at that index → create the column first, then add a list
+    // This is what makes lists grow both horizontally (new column) and
+    // vertically (new list in an existing column).
+    async function handleAddColumn(columnIndex) {
+        const existingColumn = columns.find(c => c.columnIndex === columnIndex);
+
+        const columnID = existingColumn
+            ? existingColumn.id
+            : await addColumn(columnIndex);
+
+        if (!columnID) return;
+
+        const listID = await addList(columnID, workspaceID, activeTabId);
+        if (listID) setFocusedListId(listID);
+    }
+
+    // Deletes a list. If it was the last list in its column, also deletes the column.
+    async function handleDeleteList(listID) {
+        const list = lists.find(l => l.id === listID);
+        if (!list) return;
+
+        await deleteList(listID);
+
+        const remainingInColumn = lists.filter(
+            l => l.columnID === list.columnID && l.id !== listID
+        );
+        if (remainingInColumn.length === 0) {
+            await deleteColumn(list.columnID);
+        }
+    }
+
+    // Groups tasks by listID so each KanbanList receives only its own tasks.
+    const tasksByListID = useMemo(() => {
+        const map = {};
+        for (const task of tasks) {
+            if (!map[task.listID]) map[task.listID] = [];
+            map[task.listID].push(task);
+        }
+        return map;
+    }, [tasks]);
+
+    // Groups lists by columnID so each KanbanColumn receives only its own lists.
+    const listsByColumnID = useMemo(() => {
+        const map = {};
+        for (const list of lists) {
+            if (!map[list.columnID]) map[list.columnID] = [];
+            map[list.columnID].push(list);
+        }
+        return map;
+    }, [lists]);
 
     return (
         <div className="kanban-root">
@@ -111,7 +173,7 @@ export default function Kanban() {
                     <button
                         key={i}
                         className="kanban-add-col-btn"
-                        onClick={() => handleAddList(i)}
+                        onClick={() => handleAddColumn(i)}
                     >
                         +
                     </button>
@@ -119,25 +181,25 @@ export default function Kanban() {
             </div>
 
             <div className="kanban-board" ref={boardRef} onScroll={handleBoardScroll}>
-                <div style={{
-                    position: 'relative',
-                    width: boardInnerWidth,
-                    minHeight: '100%',
-                }}>
-                    {[...new Set(lists.map(l => l.columnIndex))].sort((a, b) => a - b).map((colIndex) => (
+                <div style={{ position: "relative", width: boardInnerWidth, minHeight: "100%" }}>
+
+                    {columns.map(column => (
                         <KanbanColumn
-                            key={getColumnId(colIndex)}
-                            colIndex={colIndex}
-                            lists={getListsInColumn(colIndex)}
-                            tasks={tasks}
+                            key={column.id}
+                            column={column}
+                            lists={listsByColumnID[column.id] ?? []}
+                            tasksByListID={tasksByListID}
                             categories={categories}
                             focusedListId={focusedListId}
                             dragging={dragging}
                             insertionPoint={insertionPoint}
                             isDragging={isDragging}
+                            onAddTask={(listID) => {
+                                const list = lists.find(l => l.id === listID);
+                                addTask(listID, list?.category, list?.color);
+                            }}
                             onUpdateList={updateList}
-                            onDeleteList={(listId) => deleteList(listId)}
-                            onAddTask={addTask}
+                            onDeleteList={handleDeleteList}
                             onUpdateTask={updateTask}
                             onDeleteTask={deleteTask}
                             onStartDrag={startDrag}
@@ -148,16 +210,15 @@ export default function Kanban() {
                             registerGhost={registerGhost}
                             registerTaskElement={registerTaskElement}
                             registerListElement={registerListElement}
-                            removingIds={removingIds}
                         />
                     ))}
 
                     {isDragging && (
                         <div
                             className="kanban-ghost-column"
-                            ref={el => registerGhost('new-column', el)}
+                            ref={el => registerGhost("new-column", el)}
                             style={{
-                                position: 'absolute',
+                                position: "absolute",
                                 top: 0,
                                 left: columnCount * (300 + 16),
                             }}
@@ -172,27 +233,24 @@ export default function Kanban() {
                 <div
                     ref={registerCloneOuter}
                     style={{
-                        position: 'fixed',
+                        position: "fixed",
                         left: 0,
                         top: 0,
                         width: cloneMeta.width,
-                        pointerEvents: 'none',
+                        pointerEvents: "none",
                         zIndex: 1000,
-                        willChange: 'transform',
+                        willChange: "transform",
                     }}
                 >
                     <div ref={registerCloneInner} className="kanban-drag-clone">
                         <KanbanTask
                             task={draggingTask}
                             categories={categories}
-                            dragging={false}
                             isClone={true}
                             onUpdate={() => {}}
                             onDelete={() => {}}
                             onStartDrag={() => {}}
                             onOpen={() => {}}
-                            registerTask={() => {}}
-                            registerElement={() => {}}
                         />
                     </div>
                 </div>

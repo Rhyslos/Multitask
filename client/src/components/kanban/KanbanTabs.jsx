@@ -1,14 +1,24 @@
+// user functions
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 
-
-// Component
 export default function KanbanTabs({ tabs, activeTabId, onSelect, onAdd, onUpdate, onArchive }) {
     const [editingId, setEditingId] = useState(null);
     const [editingColor, setEditingColor] = useState(null);
     const [pickerPos, setPickerPos] = useState({ top: 0, left: 0 });
+    
     const nameRefs = useRef({});
     const colorBtnRefs = useRef({});
+
+    useEffect(() => {
+        const validIds = new Set(tabs.map(t => t.id));
+        Object.keys(nameRefs.current).forEach(id => {
+            if (!validIds.has(id)) delete nameRefs.current[id];
+        });
+        Object.keys(colorBtnRefs.current).forEach(id => {
+            if (!validIds.has(id)) delete colorBtnRefs.current[id];
+        });
+    }, [tabs]);
 
     function startEditing(tab) {
         setEditingId(tab.id);
@@ -26,7 +36,11 @@ export default function KanbanTabs({ tabs, activeTabId, onSelect, onAdd, onUpdat
 
     function handleNameBlur(tab) {
         const text = nameRefs.current[tab.id]?.textContent.trim();
-        if (text && text !== tab.name) onUpdate(tab.id, { name: text, color: tab.color });
+        if (text && text !== tab.name) {
+            onUpdate(tab.id, { name: text, color: tab.color });
+        } else if (nameRefs.current[tab.id]) {
+            nameRefs.current[tab.id].textContent = tab.name;
+        }
         setEditingId(null);
         setEditingColor(null);
     }
@@ -63,9 +77,18 @@ export default function KanbanTabs({ tabs, activeTabId, onSelect, onAdd, onUpdat
 
     useEffect(() => {
         if (!editingColor) return;
-        function handleClick() { setEditingColor(null); }
-        document.addEventListener('mousedown', handleClick);
-        return () => document.removeEventListener('mousedown', handleClick);
+        
+        function handleClose() { setEditingColor(null); }
+        
+        document.addEventListener('mousedown', handleClose);
+        window.addEventListener('scroll', handleClose, true); 
+        window.addEventListener('resize', handleClose);
+        
+        return () => {
+            document.removeEventListener('mousedown', handleClose);
+            window.removeEventListener('scroll', handleClose, true);
+            window.removeEventListener('resize', handleClose);
+        };
     }, [editingColor]);
 
     const PRESET_COLORS = [
@@ -143,7 +166,7 @@ export default function KanbanTabs({ tabs, activeTabId, onSelect, onAdd, onUpdat
                     {PRESET_COLORS.map(({ color, label }) => (
                         <button
                             key={color}
-                            className={`kanban-tab-color-swatch ${activeTab.color === color ? 'selected' : ''}`}
+                            className={`kanban-tab-color-swatch ${activeTab?.color === color ? 'selected' : ''}`}
                             style={{ background: color }}
                             title={label}
                             onClick={() => handleColorChange(activeTab, color)}

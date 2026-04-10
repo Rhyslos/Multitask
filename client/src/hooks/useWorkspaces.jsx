@@ -9,24 +9,46 @@ export function useWorkspaces(userID) {
 
     const loadLocal = useCallback(async () => {
         if (!sm || !userID) return;
+        console.log("[FRONTEND] loadLocal triggered, querying browser SQLite...");
 
-        const ws = await sm.query(`
-            SELECT w.*, c.name as categoryName, c.color as categoryColor
-            FROM workspaces w
-            LEFT JOIN categories c ON w.categoryID = c.id
-            WHERE w.userID = ? AND w.isDeleted = 0
-            ORDER BY w.createdAt DESC
-        `, [userID]);
+        try {
+            const ws = await sm.query(`
+                SELECT w.*, c.name as categoryName, c.color as categoryColor
+                FROM workspaces w
+                LEFT JOIN categories c ON w.categoryID = c.id
+                WHERE w.isDeleted = 0
+                ORDER BY w.createdAt DESC
+            `);
+            
+            console.log(`[FRONTEND] Found ${ws.length} workspaces in local DB.`, ws);
 
-        const cats = await sm.query(
-            'SELECT * FROM categories WHERE userID = ? AND isDeleted = 0 ORDER BY name ASC',
-            [userID]
-        );
+            const cats = await sm.query(
+                'SELECT * FROM categories WHERE userID = ? AND isDeleted = 0 ORDER BY name ASC',
+                [userID]
+            );
 
-        setWorkspaces(ws);
-        setCategories(cats);
-        setLoading(false);
+            setWorkspaces(ws);
+            setCategories(cats);
+            setLoading(false);
+        } catch (err) {
+            console.error("[FRONTEND] Error in loadLocal:", err);
+        }
     }, [sm, userID]);
+
+    // Listen for the invite acceptance event and force a sync
+    useEffect(() => {
+        const handleUpdate = () => {
+            console.log("[FRONTEND] 'workspacesUpdated' event received! Forcing sync...");
+            if (sm) {
+                sm.sync().then(() => {
+                    console.log("[FRONTEND] sm.sync() finished. Calling loadLocal()...");
+                    loadLocal();
+                }).catch(err => console.error("[FRONTEND] sm.sync() failed:", err));
+            }
+        };
+        window.addEventListener('workspacesUpdated', handleUpdate);
+        return () => window.removeEventListener('workspacesUpdated', handleUpdate);
+    }, [sm, loadLocal]);
 
     useEffect(() => {
         if (!sm) return;
@@ -37,8 +59,18 @@ export function useWorkspaces(userID) {
 
     useEffect(() => {
         if (!sm || !userID) return;
-        sm.sync(); // Trigger LWW sync instead of old pull
+        sm.sync(); 
     }, [sm, userID]);
+
+    useEffect(() => {
+        const handleUpdate = () => {
+            if (sm) {
+                sm.sync().then(loadLocal);
+            }
+        };
+        window.addEventListener('workspacesUpdated', handleUpdate);
+        return () => window.removeEventListener('workspacesUpdated', handleUpdate);
+    }, [sm, loadLocal]);
 
     async function createWorkspace(name, categoryID) {
         const id = crypto.randomUUID();
@@ -52,7 +84,6 @@ export function useWorkspaces(userID) {
     }
 
     async function deleteWorkspace(id) {
-        // Soft delete and update timestamp
         await sm.execute(
             `UPDATE workspaces SET isDeleted = 1, updatedAt = CURRENT_TIMESTAMP WHERE id = ?`, 
             [id]

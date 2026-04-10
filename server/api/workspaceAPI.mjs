@@ -12,13 +12,16 @@ export default function createWorkspaceRouter(db) {
     router.get('/', catchAsync(async (req, res) => {
         const { userID } = req.query;
         if (!userID) return res.status(400).json({ error: 'userID is required.' });
+        
         const workspaces = await db.all(`
-            SELECT w.*, c.name as categoryName, c.color as categoryColor
+            SELECT DISTINCT w.*, c.name as categoryName, c.color as categoryColor
             FROM workspaces w
             LEFT JOIN categories c ON w.categoryID = c.id
-            WHERE w.userID = ?
+            LEFT JOIN workspace_members wm ON w.id = wm.workspaceID
+            WHERE w.userID = ? OR wm.userID = ?
             ORDER BY w.createdAt DESC
-        `, userID);
+        `, userID, userID);
+        
         return res.json({ workspaces });
     }));
 
@@ -26,7 +29,6 @@ export default function createWorkspaceRouter(db) {
         const { name, userID, categoryID } = req.body;
         if (!name || !userID) return res.status(400).json({ error: 'Name and userID are required.' });
 
-        // Accept a client-supplied id (for sync replay) or generate one
         const id = req.body.id || crypto.randomUUID();
 
         await db.run(
@@ -34,11 +36,18 @@ export default function createWorkspaceRouter(db) {
             id, name, userID, categoryID || null
         );
 
+        const memberId = crypto.randomUUID();
+        await db.run(
+            'INSERT OR IGNORE INTO workspace_members (id, workspaceID, userID, role) VALUES (?, ?, ?, ?)',
+            memberId, id, userID, 'owner'
+        );
+
         const workspace = await db.get(`
             SELECT w.*, c.name as categoryName, c.color as categoryColor
             FROM workspaces w LEFT JOIN categories c ON w.categoryID = c.id
             WHERE w.id = ?
         `, id);
+        
         return res.status(201).json({ workspace });
     }));
 

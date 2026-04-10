@@ -9,17 +9,25 @@ export default function Login() {
     const { login } = useAuth();
     const navigate = useNavigate();
 
-    const [username, setUsername] = useState('');
+    const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
 
+    // form submission
     async function handleSubmit(e) {
         e.preventDefault();
         setError('');
+
+        // Basic email format validation
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+            return setError('Please enter a valid email address (e.g., name@example.com).');
+        }
+
         setLoading(true);
         try {
-            await login(username, password);
+            await login(email, password); 
             navigate('/dashboard');
         } catch (err) {
             setError(err.message);
@@ -49,14 +57,14 @@ export default function Login() {
 
                 <form className="auth-form" onSubmit={handleSubmit} noValidate>
                     <div className="auth-field">
-                        <label htmlFor="username">Username</label>
+                        <label htmlFor="email">Email</label>
                         <input
-                            id="username"
-                            type="text"
-                            autoComplete="username"
-                            placeholder="your_username"
-                            value={username}
-                            onChange={e => setUsername(e.target.value)}
+                            id="email"
+                            type="email"
+                            autoComplete="email"
+                            placeholder="you@example.com"
+                            value={email}
+                            onChange={e => setEmail(e.target.value)}
                             disabled={loading}
                             required
                         />
@@ -81,7 +89,7 @@ export default function Login() {
                     <button
                         type="submit"
                         className="auth-btn"
-                        disabled={loading || !username || !password}
+                        disabled={loading || !email || !password}
                     >
                         {loading ? 'Signing in…' : 'Sign in'}
                     </button>

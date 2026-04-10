@@ -1,11 +1,14 @@
 import { useState, createContext, useContext, useEffect } from 'react';
 import { SyncManager } from '../sync/syncManager';
+import { useSync } from './useSync';
 
 const AuthContext = createContext(null);
 const API = 'http://localhost:8080/api';
 const STORAGE_KEY = 'studyspace_user';
 
 export function AuthProvider({ children }) {
+    const { setUserEmail } = useSync();
+
     const [user, setUser] = useState(() => {
         try {
             const stored = localStorage.getItem(STORAGE_KEY);
@@ -15,27 +18,31 @@ export function AuthProvider({ children }) {
         }
     });
 
+    // On mount, if we already have a stored user (page refresh), open the SSE
+    // connection immediately — don't wait for an explicit login call.
     useEffect(() => {
         if (user?.id) {
             SyncManager.getInstance().then(async sm => {
                 await sm.setUser(user.id);
             });
+            if (user?.email) setUserEmail(user.email);
         }
     }, [user?.id]);
 
-    async function login(username, password) {
+    async function login(email, password) {
         try {
             const res = await fetch(`${API}/users/login`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, password }),
+                body: JSON.stringify({ email, password }),
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error);
-            
+
             localStorage.setItem(STORAGE_KEY, JSON.stringify(data.user));
             const sm = await SyncManager.getInstance();
             await sm.setUser(data.user.id);
+            setUserEmail(data.user.email);
             setUser(data.user);
             return data.user;
         } catch (err) {
@@ -43,8 +50,9 @@ export function AuthProvider({ children }) {
             const stored = localStorage.getItem(STORAGE_KEY);
             if (stored) {
                 const cached = JSON.parse(stored);
-                if (cached.username === username) {
+                if (cached.email === email) {
                     await sm.setUser(cached.id);
+                    setUserEmail(cached.email);
                     setUser(cached);
                     return cached;
                 }
@@ -53,18 +61,19 @@ export function AuthProvider({ children }) {
         }
     }
 
-    async function register(username, password) {
+    async function register(email, password) {
         const res = await fetch(`${API}/users/register`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, password }),
+            body: JSON.stringify({ email, password }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error);
-        
+
         localStorage.setItem(STORAGE_KEY, JSON.stringify(data.user));
         const sm = await SyncManager.getInstance();
         await sm.setUser(data.user.id);
+        setUserEmail(data.user.email);
         setUser(data.user);
         return data.user;
     }
@@ -72,6 +81,7 @@ export function AuthProvider({ children }) {
     function logout() {
         localStorage.removeItem(STORAGE_KEY);
         setUser(null);
+        setUserEmail(null);
         SyncManager.reset();
     }
 

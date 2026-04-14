@@ -318,14 +318,6 @@ export default function UserProfile() {
                                         placeholder="••••••••"
                                         required
                                     />
-                                    <button
-                                        type="button"
-                                        className="profile-password-toggle"
-                                        onClick={() => setShowCurrent(!showCurrent)}
-                                        aria-label={showCurrent ? "Hide password" : "Show password"}
-                                    >
-                                        <EyeIcon isVisible={showCurrent} />
-                                    </button>
                                 </div>
                             </div>
 

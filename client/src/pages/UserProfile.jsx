@@ -6,13 +6,15 @@ import { COUNTRIES, GENDER_OPTIONS } from '../components/international/constants
 
 const API = 'http://localhost:8080/api';
 
-// Custom searchable country dropdown component
+// 1. Define the Country Dropdown directly in this file so it can never be "undefined"
 function CountrySelect({ value, onChange }) {
     const [isOpen, setIsOpen] = useState(false);
     const [search, setSearch] = useState('');
     const wrapperRef = useRef(null);
 
-    const selectedCountry = COUNTRIES.find(c => c.code === value) || COUNTRIES[0];
+    // Fallback to US if no country code matches
+    const selectedCountry = COUNTRIES.find(c => c.code === value) || COUNTRIES.find(c => c.iso === 'us');
+    
     const filtered = COUNTRIES.filter(c => 
         c.name.toLowerCase().includes(search.toLowerCase()) || 
         c.code.includes(search)
@@ -77,11 +79,11 @@ function CountrySelect({ value, onChange }) {
     );
 }
 
-// Main Page Component
+// 2. Main Component
 export default function UserProfile() {
     const { user, updateUser } = useAuth();
 
-    // State declarations
+    // state declarations
     const [firstName, setFirstName] = useState(user?.firstName || '');
     const [lastName, setLastName] = useState(user?.lastName || '');
     const [email, setEmail] = useState(user?.email || '');
@@ -92,18 +94,23 @@ export default function UserProfile() {
     
     const [currentPassword, setCurrentPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    
+    const [showCurrent, setShowCurrent] = useState(false);
+    const [showNew, setShowNew] = useState(false);
+    const [showConfirm, setShowConfirm] = useState(false);
     
     const [profileLoading, setProfileLoading] = useState(false);
     const [passwordLoading, setPasswordLoading] = useState(false);
     const [profileMessage, setProfileMessage] = useState({ type: '', text: '' });
     const [passwordMessage, setPasswordMessage] = useState({ type: '', text: '' });
 
-    // Derived values
+    // derived values
     const displayName = (firstName.trim() || lastName.trim()) 
         ? `${firstName} ${lastName}`.trim() 
         : email;
 
-    // Form handlers
+    // form handlers
     async function handleProfileUpdate(e) {
         e.preventDefault();
         setProfileLoading(true);
@@ -130,8 +137,13 @@ export default function UserProfile() {
 
     async function handlePasswordChange(e) {
         e.preventDefault();
-        setPasswordLoading(true);
         setPasswordMessage({ type: '', text: '' });
+
+        if (newPassword !== confirmPassword) {
+            return setPasswordMessage({ type: 'error', text: 'New passwords do not match. Please try again.' });
+        }
+
+        setPasswordLoading(true);
         
         try {
             const res = await fetch(`${API}/users/${user.id}/password`, {
@@ -145,6 +157,10 @@ export default function UserProfile() {
             
             setCurrentPassword('');
             setNewPassword('');
+            setConfirmPassword('');
+            setShowCurrent(false);
+            setShowNew(false);
+            setShowConfirm(false);
             setPasswordMessage({ type: 'success', text: 'Password updated successfully.' });
         } catch (err) {
             setPasswordMessage({ type: 'error', text: err.message });
@@ -153,6 +169,24 @@ export default function UserProfile() {
         }
     }
 
+    // 3. Password Eye Icon Helper Component
+    const EyeIcon = ({ isVisible }) => (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '16px', height: '16px' }}>
+            {isVisible ? (
+                <>
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                    <circle cx="12" cy="12" r="3"></circle>
+                </>
+            ) : (
+                <>
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                    <line x1="1" y1="1" x2="23" y2="23"></line>
+                </>
+            )}
+        </svg>
+    );
+
+    // render
     return (
         <>
             <Navbar />
@@ -208,12 +242,13 @@ export default function UserProfile() {
                                 <div className="profile-field profile-phone-field">
                                     <label>Phone Number</label>
                                     <div className="profile-phone-group">
+                                        {/* Now references the CountrySelect component defined inside this file */}
                                         <CountrySelect value={countryCode} onChange={setCountryCode} />
                                         <input
                                             type="tel"
                                             value={phoneNumber}
                                             onChange={e => setPhoneNumber(e.target.value.replace(/[^0-9]/g, ''))}
-                                            placeholder="12 34 56 78"
+                                            placeholder="555 000 0000"
                                         />
                                     </div>
                                 </div>
@@ -260,29 +295,50 @@ export default function UserProfile() {
 
                     <div className="profile-section">
                         <h2 className="profile-section-title">Security</h2>
-                        <form className="profile-form" onSubmit={handlePasswordChange}>
+                        <form className="profile-form" onSubmit={handlePasswordChange} noValidate>
+                            
                             <div className="profile-field">
-                                <label htmlFor="currentPassword">Current Password <span className="profile-required">*</span></label>
-                                <input
-                                    id="currentPassword"
-                                    type="password"
-                                    value={currentPassword}
-                                    onChange={e => setCurrentPassword(e.target.value)}
-                                    placeholder="••••••••"
-                                    required
-                                />
+                                <label htmlFor="newPassword">New Password <span className="profile-required">*</span></label>
+                                <div className="profile-password-wrapper">
+                                    <input
+                                        id="newPassword"
+                                        type={showNew ? "text" : "password"}
+                                        value={newPassword}
+                                        onChange={e => setNewPassword(e.target.value)}
+                                        placeholder="••••••••"
+                                        required
+                                    />
+                                    <button 
+                                        type="button" 
+                                        className="profile-password-toggle"
+                                        onClick={() => setShowNew(!showNew)}
+                                        aria-label={showNew ? "Hide password" : "Show password"}
+                                    >
+                                        <EyeIcon isVisible={showNew} />
+                                    </button>
+                                </div>
                             </div>
 
                             <div className="profile-field">
-                                <label htmlFor="newPassword">New Password <span className="profile-required">*</span></label>
-                                <input
-                                    id="newPassword"
-                                    type="password"
-                                    value={newPassword}
-                                    onChange={e => setNewPassword(e.target.value)}
-                                    placeholder="••••••••"
-                                    required
-                                />
+                                <label htmlFor="confirmPassword">Confirm New Password <span className="profile-required">*</span></label>
+                                <div className="profile-password-wrapper">
+                                    <input
+                                        id="confirmPassword"
+                                        type={showConfirm ? "text" : "password"}
+                                        value={confirmPassword}
+                                        onChange={e => setConfirmPassword(e.target.value)}
+                                        placeholder="••••••••"
+                                        required
+                                    />
+                                    <button 
+                                        type="button" 
+                                        className="profile-password-toggle"
+                                        onClick={() => setShowNew(!showNew)}
+                                        aria-label={showNew ? "Hide password" : "Show password"}
+                                    >
+                                        <EyeIcon isVisible={showNew} />
+                                    </button>
+                                </div>
                             </div>
 
                             {passwordMessage.text && (
@@ -291,7 +347,11 @@ export default function UserProfile() {
                                 </p>
                             )}
 
-                            <button type="submit" className="profile-btn" disabled={passwordLoading || !currentPassword || !newPassword}>
+                            <button 
+                                type="submit" 
+                                className="profile-btn" 
+                                disabled={passwordLoading || !currentPassword || !newPassword || !confirmPassword}
+                            >
                                 {passwordLoading ? 'Updating...' : 'Update Password'}
                             </button>
                         </form>

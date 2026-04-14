@@ -7,9 +7,12 @@ import Dashboard from './pages/Dashboard';
 import Kanban from './pages/Kanban';
 import Notation from './pages/Notation';
 import UserProfile from './pages/UserProfile';
+import PrivacyPolicy from './pages/PrivacyPolicy';
+import TermsOfService from './pages/TermsOfService';
 
 export const appName = Object.freeze("Example App Name");
 
+// routing components
 function PrivateRoute({ children }) {
     const { user } = useAuth();
     return user ? children : <Navigate to="/login" replace />;
@@ -22,9 +25,10 @@ function AppRoutes() {
             <Route path="/login"    element={user ? <Navigate to="/dashboard" replace /> : <Login />} />
             <Route path="/register" element={user ? <Navigate to="/dashboard" replace /> : <Register />} />
             
-            <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
+            <Route path="/privacy"  element={<PrivacyPolicy />} />
+            <Route path="/tos"      element={<TermsOfService />} />
             
-            {/* Added the profile route here */}
+            <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
             <Route path="/profile"   element={<PrivateRoute><UserProfile /></PrivateRoute>} />
             
             <Route path="/workspace/:workspaceID/kanban"   element={<PrivateRoute><Kanban /></PrivateRoute>} />
@@ -34,6 +38,7 @@ function AppRoutes() {
     );
 }
 
+// root component
 export default function App() {
     return (
         <SyncProvider>

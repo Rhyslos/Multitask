@@ -1,10 +1,9 @@
+// page component
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { appName } from '../App';
 
-
-// Page
 export default function Login() {
     const { login } = useAuth();
     const navigate = useNavigate();
@@ -14,12 +13,11 @@ export default function Login() {
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
 
-    // form submission
+    // form handlers
     async function handleSubmit(e) {
         e.preventDefault();
         setError('');
 
-        // Basic email format validation
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(email)) {
             return setError('Please enter a valid email address (e.g., name@example.com).');
@@ -96,8 +94,15 @@ export default function Login() {
                 </form>
 
                 <div className="auth-footer">
-                    <span>Don't have an account?</span>
-                    <Link to="/register" className="auth-link">Register</Link>
+                    <div className="auth-footer-prompt">
+                        <span>Don't have an account?</span>
+                        <Link to="/register" className="auth-link">Register</Link>
+                    </div>
+                    <div className="auth-footer-legal">
+                        <Link to="/privacy" className="auth-link">Privacy Policy</Link>
+                        <span>•</span>
+                        <Link to="/tos" className="auth-link">Terms of Service</Link>
+                    </div>
                 </div>
             </div>
         </div>

@@ -2,21 +2,19 @@ import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import Navbar from '../components/Navbar';
 import 'flag-icons/css/flag-icons.min.css';
-import { COUNTRIES, GENDER_OPTIONS } from '../components/international/constants';
+import { COUNTRIES, GENDER_OPTIONS, formatPhoneNumber } from '../components/international/constants';
 
 const API = 'http://localhost:8080/api';
 
-// 1. Define the Country Dropdown directly in this file so it can never be "undefined"
 function CountrySelect({ value, onChange }) {
     const [isOpen, setIsOpen] = useState(false);
     const [search, setSearch] = useState('');
     const wrapperRef = useRef(null);
 
-    // Fallback to US if no country code matches
-    const selectedCountry = COUNTRIES.find(c => c.code === value) || COUNTRIES.find(c => c.iso === 'us');
-    
-    const filtered = COUNTRIES.filter(c => 
-        c.name.toLowerCase().includes(search.toLowerCase()) || 
+    const selectedCountry = COUNTRIES.find(c => c.iso === value) || COUNTRIES.find(c => c.iso === 'us');
+
+    const filtered = COUNTRIES.filter(c =>
+        c.name.toLowerCase().includes(search.toLowerCase()) ||
         c.code.includes(search)
     );
 
@@ -32,7 +30,7 @@ function CountrySelect({ value, onChange }) {
 
     return (
         <div className="country-select-wrapper" ref={wrapperRef}>
-            <div 
+            <div
                 className={`country-select-trigger ${isOpen ? 'active' : ''}`}
                 onClick={() => setIsOpen(!isOpen)}
             >
@@ -43,27 +41,27 @@ function CountrySelect({ value, onChange }) {
 
             {isOpen && (
                 <div className="country-select-menu">
-                    <input 
-                        type="text" 
-                        className="country-select-search" 
-                        placeholder="Search country..." 
+                    <input
+                        type="text"
+                        className="country-select-search"
+                        placeholder="Search country..."
                         value={search}
                         onChange={e => setSearch(e.target.value)}
                         autoFocus
                     />
                     <div className="country-select-list">
                         {filtered.map(c => (
-                            <div 
-                                key={c.name} 
+                            <div
+                                key={c.name}
                                 className="country-select-item"
                                 onClick={() => {
-                                    onChange(c.code);
+                                    onChange(c.iso);
                                     setIsOpen(false);
                                     setSearch('');
                                 }}
                             >
                                 <span>
-                                    <span className={`fi fi-${c.iso}`} style={{ marginRight: '8px' }}></span> 
+                                    <span className={`fi fi-${c.iso}`} style={{ marginRight: '8px' }}></span>
                                     {c.name}
                                 </span>
                                 <span className="country-select-item-code">{c.code}</span>
@@ -79,53 +77,65 @@ function CountrySelect({ value, onChange }) {
     );
 }
 
-// 2. Main Component
 export default function UserProfile() {
     const { user, updateUser } = useAuth();
 
-    // state declarations
     const [firstName, setFirstName] = useState(user?.firstName || '');
     const [lastName, setLastName] = useState(user?.lastName || '');
     const [email, setEmail] = useState(user?.email || '');
-    const [countryCode, setCountryCode] = useState(user?.countryCode || '+1');
+    const [countryIso, setCountryIso] = useState(user?.countryIso || 'us');
     const [phoneNumber, setPhoneNumber] = useState(user?.phoneNumber || '');
     const [jobTitle, setJobTitle] = useState(user?.jobTitle || '');
     const [gender, setGender] = useState(user?.gender || '');
-    
+
     const [currentPassword, setCurrentPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
-    
+
     const [showCurrent, setShowCurrent] = useState(false);
     const [showNew, setShowNew] = useState(false);
     const [showConfirm, setShowConfirm] = useState(false);
-    
+
     const [profileLoading, setProfileLoading] = useState(false);
     const [passwordLoading, setPasswordLoading] = useState(false);
     const [profileMessage, setProfileMessage] = useState({ type: '', text: '' });
     const [passwordMessage, setPasswordMessage] = useState({ type: '', text: '' });
 
-    // derived values
-    const displayName = (firstName.trim() || lastName.trim()) 
-        ? `${firstName} ${lastName}`.trim() 
+    const selectedCountry = COUNTRIES.find(c => c.iso === countryIso) || COUNTRIES.find(c => c.iso === 'us');
+
+    const displayName = (firstName.trim() || lastName.trim())
+        ? `${firstName} ${lastName}`.trim()
         : email;
 
-    // form handlers
+    function handleCountryChange(iso) {
+        setCountryIso(iso);
+        setPhoneNumber('');
+    }
+
     async function handleProfileUpdate(e) {
         e.preventDefault();
         setProfileLoading(true);
         setProfileMessage({ type: '', text: '' });
-        
+
         try {
             const res = await fetch(`${API}/users/${user.id}/profile`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ firstName, lastName, email, countryCode, phoneNumber, jobTitle, gender }),
+                body: JSON.stringify({
+                    firstName,
+                    lastName,
+                    email,
+                    countryIso,
+                    countryCode: selectedCountry.code,
+                    phoneNumber,
+                    jobTitle,
+                    gender
+                }),
             });
             const data = await res.json();
-            
+
             if (!res.ok) throw new Error(data.error);
-            
+
             updateUser(data.user);
             setProfileMessage({ type: 'success', text: 'Profile updated successfully.' });
         } catch (err) {
@@ -144,7 +154,7 @@ export default function UserProfile() {
         }
 
         setPasswordLoading(true);
-        
+
         try {
             const res = await fetch(`${API}/users/${user.id}/password`, {
                 method: 'PATCH',
@@ -152,9 +162,9 @@ export default function UserProfile() {
                 body: JSON.stringify({ currentPassword, newPassword }),
             });
             const data = await res.json();
-            
+
             if (!res.ok) throw new Error(data.error);
-            
+
             setCurrentPassword('');
             setNewPassword('');
             setConfirmPassword('');
@@ -169,7 +179,6 @@ export default function UserProfile() {
         }
     }
 
-    // 3. Password Eye Icon Helper Component
     const EyeIcon = ({ isVisible }) => (
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '16px', height: '16px' }}>
             {isVisible ? (
@@ -186,7 +195,6 @@ export default function UserProfile() {
         </svg>
     );
 
-    // render
     return (
         <>
             <Navbar />
@@ -202,7 +210,7 @@ export default function UserProfile() {
                         <p className="profile-display-name">
                             Displaying as: <strong>{displayName}</strong>
                         </p>
-                        
+
                         <form className="profile-form" onSubmit={handleProfileUpdate}>
                             <div className="profile-row">
                                 <div className="profile-field">
@@ -242,13 +250,15 @@ export default function UserProfile() {
                                 <div className="profile-field profile-phone-field">
                                     <label>Phone Number</label>
                                     <div className="profile-phone-group">
-                                        {/* Now references the CountrySelect component defined inside this file */}
-                                        <CountrySelect value={countryCode} onChange={setCountryCode} />
+                                        <CountrySelect value={countryIso} onChange={handleCountryChange} />
                                         <input
-                                            type="tel"
+                                            type="text"
                                             value={phoneNumber}
-                                            onChange={e => setPhoneNumber(e.target.value.replace(/[^0-9]/g, ''))}
-                                            placeholder="555 000 0000"
+                                            onChange={e => {
+                                                const digits = e.target.value.replace(/\D/g, '').slice(0, selectedCountry.digits);
+                                                setPhoneNumber(formatPhoneNumber(digits, selectedCountry.format));
+                                            }}
+                                            placeholder={selectedCountry.format.replace(/X/g, '0')}
                                         />
                                     </div>
                                 </div>
@@ -267,9 +277,9 @@ export default function UserProfile() {
                                 </div>
                                 <div className="profile-field">
                                     <label htmlFor="gender">Gender (Optional)</label>
-                                    <select 
-                                        id="gender" 
-                                        value={gender} 
+                                    <select
+                                        id="gender"
+                                        value={gender}
                                         onChange={e => setGender(e.target.value)}
                                         className="profile-select"
                                     >
@@ -296,7 +306,29 @@ export default function UserProfile() {
                     <div className="profile-section">
                         <h2 className="profile-section-title">Security</h2>
                         <form className="profile-form" onSubmit={handlePasswordChange} noValidate>
-                            
+
+                            <div className="profile-field">
+                                <label htmlFor="currentPassword">Current Password <span className="profile-required">*</span></label>
+                                <div className="profile-password-wrapper">
+                                    <input
+                                        id="currentPassword"
+                                        type={showCurrent ? "text" : "password"}
+                                        value={currentPassword}
+                                        onChange={e => setCurrentPassword(e.target.value)}
+                                        placeholder="••••••••"
+                                        required
+                                    />
+                                    <button
+                                        type="button"
+                                        className="profile-password-toggle"
+                                        onClick={() => setShowCurrent(!showCurrent)}
+                                        aria-label={showCurrent ? "Hide password" : "Show password"}
+                                    >
+                                        <EyeIcon isVisible={showCurrent} />
+                                    </button>
+                                </div>
+                            </div>
+
                             <div className="profile-field">
                                 <label htmlFor="newPassword">New Password <span className="profile-required">*</span></label>
                                 <div className="profile-password-wrapper">
@@ -308,8 +340,8 @@ export default function UserProfile() {
                                         placeholder="••••••••"
                                         required
                                     />
-                                    <button 
-                                        type="button" 
+                                    <button
+                                        type="button"
                                         className="profile-password-toggle"
                                         onClick={() => setShowNew(!showNew)}
                                         aria-label={showNew ? "Hide password" : "Show password"}
@@ -330,13 +362,13 @@ export default function UserProfile() {
                                         placeholder="••••••••"
                                         required
                                     />
-                                    <button 
-                                        type="button" 
+                                    <button
+                                        type="button"
                                         className="profile-password-toggle"
-                                        onClick={() => setShowNew(!showNew)}
-                                        aria-label={showNew ? "Hide password" : "Show password"}
+                                        onClick={() => setShowConfirm(!showConfirm)}
+                                        aria-label={showConfirm ? "Hide password" : "Show password"}
                                     >
-                                        <EyeIcon isVisible={showNew} />
+                                        <EyeIcon isVisible={showConfirm} />
                                     </button>
                                 </div>
                             </div>
@@ -347,9 +379,9 @@ export default function UserProfile() {
                                 </p>
                             )}
 
-                            <button 
-                                type="submit" 
-                                className="profile-btn" 
+                            <button
+                                type="submit"
+                                className="profile-btn"
                                 disabled={passwordLoading || !currentPassword || !newPassword || !confirmPassword}
                             >
                                 {passwordLoading ? 'Updating...' : 'Update Password'}

@@ -27,46 +27,46 @@ async function verifyPassword(password, stored) {
 export default function createUserRouter(db) {
     const router = Router();
 
+    // user registration routes
     router.post('/register', catchAsync(async (req, res) => {
-        const { username, password } = req.body;
+        const { email, password } = req.body;
 
-        if (!username || !password)
-            return res.status(400).json({ error: 'Username and password are required.' });
-        if (username.length < 3)
-            return res.status(400).json({ error: 'Username must be at least 3 characters.' });
+        if (!email || !password)
+            return res.status(400).json({ error: 'Email and password are required.' });
         if (password.length < 6)
             return res.status(400).json({ error: 'Password must be at least 6 characters.' });
 
-        const existing = await db.get('SELECT id FROM users WHERE username = ?', username);
+        const existing = await db.get('SELECT id FROM users WHERE email = ?', email);
         if (existing)
-            return res.status(409).json({ error: 'Username already taken.' });
+            return res.status(409).json({ error: 'Email already registered.' });
 
         const password_hash = await hashPassword(password);
         const id = crypto.randomUUID();
 
         await db.run(
-            'INSERT INTO users (id, username, password_hash) VALUES (?, ?, ?)',
-            id, username, password_hash
+            'INSERT INTO users (id, email, password_hash) VALUES (?, ?, ?)',
+            id, email, password_hash
         );
 
-        return res.status(201).json({ user: { id, username } });
+        return res.status(201).json({ user: { id, email } });
     }));
 
+    // user authentication routes
     router.post('/login', catchAsync(async (req, res) => {
-        const { username, password } = req.body;
+        const { email, password } = req.body;
 
-        if (!username || !password)
-            return res.status(400).json({ error: 'Username and password are required.' });
+        if (!email || !password)
+            return res.status(400).json({ error: 'Email and password are required.' });
 
-        const user = await db.get('SELECT * FROM users WHERE username = ?', username);
+        const user = await db.get('SELECT * FROM users WHERE email = ?', email);
         if (!user)
-            return res.status(401).json({ error: 'Invalid username or password.' });
+            return res.status(401).json({ error: 'Invalid email or password.' });
 
         const valid = await verifyPassword(password, user.password_hash);
         if (!valid)
-            return res.status(401).json({ error: 'Invalid username or password.' });
+            return res.status(401).json({ error: 'Invalid email or password.' });
 
-        return res.json({ user: { id: user.id, username: user.username } });
+        return res.json({ user: { id: user.id, email: user.email } });
     }));
 
     return router;

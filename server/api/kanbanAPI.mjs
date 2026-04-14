@@ -2,13 +2,14 @@ import express from 'express';
 import crypto from 'crypto';
 import { catchAsync } from './apiUtils.mjs';
 
-
-// Router
 export default function createKanbanRouter(db) {
     const router = express.Router();
 
 
+    // -------------------------------------------------------------------------
     // Tabs
+    // -------------------------------------------------------------------------
+
     router.get('/tabs/:workspaceId', catchAsync(async (req, res) => {
         const { workspaceId } = req.params;
 
@@ -17,7 +18,6 @@ export default function createKanbanRouter(db) {
             [workspaceId]
         );
 
-        // Default tab
         if (tabs.length === 0) {
             const id = crypto.randomUUID();
             await db.run(
@@ -47,7 +47,7 @@ export default function createKanbanRouter(db) {
         const { name, color } = req.body;
 
         await db.run(
-            'UPDATE kanban_tabs SET name = ?, color = ? WHERE id = ?',
+            'UPDATE kanban_tabs SET name = ?, color = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?',
             [name, color, tabId]
         );
 
@@ -58,7 +58,7 @@ export default function createKanbanRouter(db) {
         const { tabId } = req.params;
 
         await db.run(
-            'UPDATE kanban_tabs SET isArchived = 1 WHERE id = ?',
+            'UPDATE kanban_tabs SET isArchived = 1, updatedAt = CURRENT_TIMESTAMP WHERE id = ?',
             [tabId]
         );
 
@@ -69,74 +69,120 @@ export default function createKanbanRouter(db) {
         const { updates } = req.body;
 
         await Promise.all(updates.map(({ id, tabOrder }) =>
-            db.run('UPDATE kanban_tabs SET tabOrder = ? WHERE id = ?', [tabOrder, id])
+            db.run(
+                'UPDATE kanban_tabs SET tabOrder = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?',
+                [tabOrder, id]
+            )
         ));
 
         res.json({ message: 'Tabs reordered successfully' });
     }));
 
 
-    // Board
-    router.get('/board/:workspaceId/:tabId', catchAsync(async (req, res) => {
-        const { workspaceId, tabId } = req.params;
+    // -------------------------------------------------------------------------
+    // Columns
+    // A column is a stable entity (UUID) that owns lists. columnIndex is only
+    // used for display ordering and is never used as an identifier.
+    // -------------------------------------------------------------------------
 
-        const lists = await db.all(
-            'SELECT * FROM lists WHERE workspaceID = ? AND tabID = ?',
-            [workspaceId, tabId]
-        );
-
-        const listIds = lists.map(list => list.id);
-        let tasks = [];
-        if (listIds.length > 0) {
-            const placeholders = listIds.map(() => '?').join(',');
-            tasks = await db.all(
-                `SELECT * FROM tasks WHERE listID IN (${placeholders}) ORDER BY taskOrder ASC`,
-                listIds
-            );
-        }
-
-        res.json({ lists, tasks });
-    }));
-
-    router.get('/board/:workspaceId', catchAsync(async (req, res) => {
-        const { workspaceId } = req.params;
-
-        const lists = await db.all('SELECT * FROM lists WHERE workspaceID = ?', [workspaceId]);
-
-        const listIds = lists.map(list => list.id);
-        let tasks = [];
-        if (listIds.length > 0) {
-            const placeholders = listIds.map(() => '?').join(',');
-            tasks = await db.all(
-                `SELECT * FROM tasks WHERE listID IN (${placeholders}) ORDER BY taskOrder ASC`,
-                listIds
-            );
-        }
-
-        res.json({ lists, tasks });
-    }));
-
-
-    // Lists
-    router.post('/lists', catchAsync(async (req, res) => {
-        const { id, name, category, color, direction, workspaceID, columnIndex, tabID } = req.body;
+    router.post('/columns', catchAsync(async (req, res) => {
+        const { id, tabID, workspaceID, columnIndex } = req.body;
 
         await db.run(
-            'INSERT INTO lists (id, name, category, color, direction, workspaceID, columnIndex, tabID) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-            [id, name, category ?? '', color ?? '', direction, workspaceID, columnIndex ?? 0, tabID ?? null]
+            'INSERT INTO kanban_columns (id, tabID, workspaceID, columnIndex) VALUES (?, ?, ?, ?)',
+            [id, tabID, workspaceID, columnIndex ?? 0]
         );
 
-        res.status(201).json({ message: 'List created successfully' });
+        const column = await db.get('SELECT * FROM kanban_columns WHERE id = ?', [id]);
+        res.status(201).json({ column });
     }));
 
-    router.put('/lists/reorder', catchAsync(async (req, res) => {
+    router.delete('/columns/:columnId', catchAsync(async (req, res) => {
+        const { columnId } = req.params;
+
+        // Soft-delete column and cascade to its lists and their tasks
+        await db.run(
+            'UPDATE kanban_columns SET isDeleted = 1, updatedAt = CURRENT_TIMESTAMP WHERE id = ?',
+            [columnId]
+        );
+        await db.run(
+            'UPDATE lists SET isDeleted = 1, updatedAt = CURRENT_TIMESTAMP WHERE columnID = ?',
+            [columnId]
+        );
+        await db.run(`
+            UPDATE tasks SET isDeleted = 1, updatedAt = CURRENT_TIMESTAMP 
+            WHERE listID IN (SELECT id FROM lists WHERE columnID = ?)
+        `, [columnId]);
+
+        res.json({ message: 'Column deleted successfully' });
+    }));
+
+    // Reorder: accepts an array of { id, columnIndex } and updates each column
+    router.put('/columns/reorder', catchAsync(async (req, res) => {
         const { updates } = req.body;
 
         await Promise.all(updates.map(({ id, columnIndex }) =>
-            db.run('UPDATE lists SET columnIndex = ? WHERE id = ?', [columnIndex, id])
+            db.run(
+                'UPDATE kanban_columns SET columnIndex = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?',
+                [columnIndex, id]
+            )
         ));
 
-        res.json({ message: 'Lists reordered successfully' });
+        res.json({ message: 'Columns reordered successfully' });
+    }));
+
+
+    // -------------------------------------------------------------------------
+    // Board — fetch columns + lists + tasks for a tab in one request
+    // -------------------------------------------------------------------------
+
+    router.get('/board/:workspaceId/:tabId', catchAsync(async (req, res) => {
+        const { workspaceId, tabId } = req.params;
+
+        const columns = await db.all(
+            'SELECT * FROM kanban_columns WHERE workspaceID = ? AND tabID = ? AND isDeleted = 0 ORDER BY columnIndex ASC',
+            [workspaceId, tabId]
+        );
+
+        const columnIds = columns.map(c => c.id);
+        let lists = [];
+        let tasks = [];
+
+        if (columnIds.length > 0) {
+            const colPlaceholders = columnIds.map(() => '?').join(',');
+            lists = await db.all(
+                `SELECT * FROM lists WHERE columnID IN (${colPlaceholders}) AND isDeleted = 0`,
+                columnIds
+            );
+
+            const listIds = lists.map(l => l.id);
+            if (listIds.length > 0) {
+                const listPlaceholders = listIds.map(() => '?').join(',');
+                tasks = await db.all(
+                    `SELECT * FROM tasks WHERE listID IN (${listPlaceholders}) AND isDeleted = 0 ORDER BY taskOrder ASC`,
+                    listIds
+                );
+            }
+        }
+
+        res.json({ columns, lists, tasks });
+    }));
+
+
+    // -------------------------------------------------------------------------
+    // Lists
+    // -------------------------------------------------------------------------
+
+    router.post('/lists', catchAsync(async (req, res) => {
+        const { id, name, category, color, direction, columnID, workspaceID, tabID } = req.body;
+
+        await db.run(
+            'INSERT INTO lists (id, name, category, color, direction, columnID, workspaceID, tabID) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            [id, name ?? 'New List', category ?? '', color ?? '', direction ?? 'vertical', columnID, workspaceID, tabID ?? null]
+        );
+
+        const list = await db.get('SELECT * FROM lists WHERE id = ?', [id]);
+        res.status(201).json({ list });
     }));
 
     router.put('/lists/:listId', catchAsync(async (req, res) => {
@@ -144,7 +190,7 @@ export default function createKanbanRouter(db) {
         const { name, category, color } = req.body;
 
         await db.run(
-            'UPDATE lists SET name = ?, category = ?, color = ? WHERE id = ?',
+            'UPDATE lists SET name = ?, category = ?, color = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?',
             [name, category, color, listId]
         );
 
@@ -153,21 +199,34 @@ export default function createKanbanRouter(db) {
 
     router.delete('/lists/:listId', catchAsync(async (req, res) => {
         const { listId } = req.params;
-        await db.run('DELETE FROM lists WHERE id = ?', [listId]);
+
+        await db.run(
+            'UPDATE lists SET isDeleted = 1, updatedAt = CURRENT_TIMESTAMP WHERE id = ?',
+            [listId]
+        );
+        await db.run(
+            'UPDATE tasks SET isDeleted = 1, updatedAt = CURRENT_TIMESTAMP WHERE listID = ?',
+            [listId]
+        );
+
         res.json({ message: 'List deleted successfully' });
     }));
 
 
+    // -------------------------------------------------------------------------
     // Tasks
+    // -------------------------------------------------------------------------
+
     router.post('/tasks', catchAsync(async (req, res) => {
         const { id, title, description, isCompleted, originalCategory, color, listID, taskOrder } = req.body;
 
         await db.run(
             'INSERT INTO tasks (id, title, description, isCompleted, originalCategory, color, listID, taskOrder) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-            [id, title, description, isCompleted, originalCategory, color ?? '', listID, taskOrder ?? 0]
+            [id, title ?? 'New Task', description ?? '', isCompleted ?? 0, originalCategory ?? '', color ?? '', listID, taskOrder ?? 0]
         );
 
-        res.status(201).json({ message: 'Task created successfully' });
+        const task = await db.get('SELECT * FROM tasks WHERE id = ?', [id]);
+        res.status(201).json({ task });
     }));
 
     router.put('/tasks/reorder', catchAsync(async (req, res) => {
@@ -175,7 +234,7 @@ export default function createKanbanRouter(db) {
 
         await Promise.all(updates.map(({ id, listID, taskOrder }) =>
             db.run(
-                'UPDATE tasks SET listID = ?, taskOrder = ? WHERE id = ?',
+                'UPDATE tasks SET listID = ?, taskOrder = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?',
                 [listID, taskOrder, id]
             )
         ));
@@ -188,7 +247,7 @@ export default function createKanbanRouter(db) {
         const { title, description, isCompleted, listID, originalCategory, color, taskOrder } = req.body;
 
         await db.run(
-            'UPDATE tasks SET title = ?, description = ?, isCompleted = ?, listID = ?, originalCategory = ?, color = ?, taskOrder = ? WHERE id = ?',
+            'UPDATE tasks SET title = ?, description = ?, isCompleted = ?, listID = ?, originalCategory = ?, color = ?, taskOrder = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?',
             [title, description, isCompleted, listID, originalCategory, color, taskOrder, taskId]
         );
 
@@ -197,7 +256,12 @@ export default function createKanbanRouter(db) {
 
     router.delete('/tasks/:taskId', catchAsync(async (req, res) => {
         const { taskId } = req.params;
-        await db.run('DELETE FROM tasks WHERE id = ?', [taskId]);
+
+        await db.run(
+            'UPDATE tasks SET isDeleted = 1, updatedAt = CURRENT_TIMESTAMP WHERE id = ?',
+            [taskId]
+        );
+
         res.json({ message: 'Task deleted successfully' });
     }));
 

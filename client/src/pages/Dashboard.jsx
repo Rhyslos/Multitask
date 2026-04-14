@@ -7,6 +7,7 @@ import Navbar from '../components/Navbar';
 import DefaultSubbar from '../components/subbar/DefaultSubbar';
 import CategoryFilter from '../components/CategoryFilter';
 import CreateWorkspaceModal from '../components/CreateWorkspaceModal';
+import WorkspaceSettingsModal from '../components/WorkspaceSettingsModal';
 import AnimatedRemoval from '../components/AnimatedRemoval';
 
 
@@ -17,6 +18,7 @@ export default function Dashboard() {
     const { workspaces, categories, loading, createWorkspace, deleteWorkspace, createCategory } = useWorkspaces(user?.id);
 
     const [modalOpen, setModalOpen] = useState(false);
+    const [settingsWorkspace, setSettingsWorkspace] = useState(null);
     const [filterCategory, setFilterCategory] = useState(null);
     const [filterText, setFilterText] = useState('');
 
@@ -65,24 +67,41 @@ export default function Dashboard() {
                                     className="workspace-card"
                                     onClick={() => handleOpen(ws.id)}
                                 >
-                                    {ws.categoryName && (
-                                        <span
-                                            className="workspace-card-tag"
-                                            style={{ background: ws.categoryColor + '22', color: ws.categoryColor }}
-                                        >
-                                            {ws.categoryName}
-                                        </span>
-                                    )}
+                                    {/* Header Row: Tag and Action Buttons */}
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                                        {ws.categoryName ? (
+                                            <span
+                                                className="workspace-card-tag"
+                                                style={{ background: ws.categoryColor + '22', color: ws.categoryColor, margin: 0 }}
+                                            >
+                                                {ws.categoryName}
+                                            </span>
+                                        ) : <span />}
+
+                                        <div style={{ display: 'flex', gap: '4px', zIndex: 2 }}>
+                                            <button
+                                                className="workspace-card-settings"
+                                                onClick={e => { e.stopPropagation(); setSettingsWorkspace(ws); }}
+                                                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: 'inherit', fontSize: '1.2rem', lineHeight: 1 }}
+                                                title="Workspace Settings"
+                                            >
+                                                ⋮
+                                            </button>
+                                            <button
+                                                className="workspace-card-delete"
+                                                onClick={e => { e.stopPropagation(); triggerRemoval(ws.id); }}
+                                                style={{ position: 'relative', top: 'auto', right: 'auto' }}
+                                                title="Delete Workspace"
+                                            >
+                                                ✕
+                                            </button>
+                                        </div>
+                                    </div>
+
                                     <p className="workspace-card-name">{ws.name}</p>
                                     <p className="workspace-card-date">
                                         {new Date(ws.createdAt).toLocaleDateString()}
                                     </p>
-                                    <button
-                                        className="workspace-card-delete"
-                                        onClick={e => { e.stopPropagation(); triggerRemoval(ws.id); }}
-                                    >
-                                        ✕
-                                    </button>
                                 </div>
                             </AnimatedRemoval>
                         ))}
@@ -96,6 +115,13 @@ export default function Dashboard() {
                     onConfirm={handleCreate}
                     onClose={() => setModalOpen(false)}
                     onCreateCategory={createCategory}
+                />
+            )}
+
+            {settingsWorkspace && (
+                <WorkspaceSettingsModal
+                    workspace={settingsWorkspace}
+                    onClose={() => setSettingsWorkspace(null)}
                 />
             )}
         </div>

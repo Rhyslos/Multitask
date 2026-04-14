@@ -16,7 +16,9 @@ import { FontWeight } from './FontWeight';
 
 // Editor configuration setup
 export const editorExtensions = [
-    StarterKit,
+    StarterKit.configure({ 
+        history: false // Disabled so Yjs can take over undo/redo
+    }),
     TextAlign.configure({ types: ['heading', 'paragraph'] }),
     TextStyle,
     Color,

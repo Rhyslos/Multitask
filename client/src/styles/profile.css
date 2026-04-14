@@ -283,3 +283,33 @@
     font-size: 13px;
     color: var(--muted);
 }
+
+/* Password Visibility Toggles */
+.profile-password-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.profile-password-wrapper input {
+    width: 100%;
+    padding-right: 40px; /* Leaves room so text doesn't hide behind the icon */
+}
+
+.profile-password-toggle {
+    position: absolute;
+    right: 12px;
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+    transition: color 0.15s;
+}
+
+.profile-password-toggle:hover {
+    color: var(--ink);
+}

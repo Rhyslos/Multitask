@@ -1,3 +1,4 @@
+// user functions
 import { useState, useRef, useEffect } from 'react';
 import 'flag-icons/css/flag-icons.min.css';
 import { COUNTRIES } from './constants';
@@ -7,12 +8,15 @@ export default function CountrySelect({ value, onChange }) {
     const [search, setSearch] = useState('');
     const wrapperRef = useRef(null);
 
-    const selectedCountry = COUNTRIES.find(c => c.code === value) || COUNTRIES.find(c => c.iso === 'us');
+    const safeValue = typeof value === 'string' ? value.toLowerCase() : '';
+    const selectedCountry = COUNTRIES.find(c => c.iso.toLowerCase() === safeValue) || COUNTRIES.find(c => c.iso === 'us');
+    
     const filtered = COUNTRIES.filter(c => 
         c.name.toLowerCase().includes(search.toLowerCase()) || 
         c.code.includes(search)
     );
 
+    // user functions
     useEffect(() => {
         function handleClickOutside(event) {
             if (wrapperRef.current && !wrapperRef.current.contains(event.target)) {
@@ -47,10 +51,10 @@ export default function CountrySelect({ value, onChange }) {
                     <div className="country-select-list">
                         {filtered.map(c => (
                             <div 
-                                key={c.name} 
+                                key={c.iso} 
                                 className="country-select-item"
                                 onClick={() => {
-                                    onChange(c.code);
+                                    onChange(c.iso);
                                     setIsOpen(false);
                                     setSearch('');
                                 }}

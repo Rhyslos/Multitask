@@ -28,7 +28,7 @@ export default function createUserRouter(db) {
 
     // user registration route
     router.post('/register', catchAsync(async (req, res) => {
-        const { email, password, countryCode } = req.body;
+        const { email, password, countryCode, countryIso } = req.body;
 
         if (!email || !password)
             return res.status(400).json({ error: 'Email and password are required.' });
@@ -42,10 +42,9 @@ export default function createUserRouter(db) {
         const password_hash = await hashPassword(password);
         const id = crypto.randomUUID();
 
-        // Include countryCode in the INSERT statement
         await db.run(
-            'INSERT INTO users (id, email, password_hash, countryCode) VALUES (?, ?, ?, ?)',
-            id, email, password_hash, countryCode || '+1'
+            'INSERT INTO users (id, email, password_hash, countryCode, countryIso) VALUES (?, ?, ?, ?, ?)',
+            id, email, password_hash, countryCode || '+1', countryIso || 'us'
         );
 
         return res.status(201).json({ 
@@ -54,7 +53,8 @@ export default function createUserRouter(db) {
                 email, 
                 firstName: null, 
                 lastName: null, 
-                countryCode: countryCode || '+1', // Return it to the frontend
+                countryCode: countryCode || '+1',
+                countryIso: countryIso || 'us',
                 phoneNumber: null, 
                 jobTitle: null, 
                 gender: null 
@@ -83,6 +83,7 @@ export default function createUserRouter(db) {
                 email: user.email,
                 firstName: user.firstName,
                 lastName: user.lastName,
+                countryIso: user.countryIso,
                 countryCode: user.countryCode,
                 phoneNumber: user.phoneNumber,
                 jobTitle: user.jobTitle,
@@ -91,19 +92,32 @@ export default function createUserRouter(db) {
         });
     }));
 
-    // user profile update route
+    // user functions
+    router.get('/:id/profile', catchAsync(async (req, res) => {
+        const user = await db.get(
+            'SELECT id, email, firstName, lastName, countryIso, countryCode, phoneNumber, jobTitle, gender FROM users WHERE id = ?',
+            req.params.id
+        );
+
+        if (!user) {
+            return res.status(404).json({ error: 'User not found.' });
+        }
+
+        return res.json({ user });
+    }));
+
     router.patch('/:id/profile', catchAsync(async (req, res) => {
-        const { firstName, lastName, email, countryCode, phoneNumber, jobTitle, gender } = req.body;
+        const { firstName, lastName, email, countryIso, countryCode, phoneNumber, jobTitle, gender } = req.body;
         
         const existing = await db.get('SELECT id FROM users WHERE email = ? AND id != ?', email, req.params.id);
         if (existing) return res.status(409).json({ error: 'Email already in use by another account.' });
 
         await db.run(
-            'UPDATE users SET firstName = ?, lastName = ?, email = ?, countryCode = ?, phoneNumber = ?, jobTitle = ?, gender = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?',
-            firstName || null, lastName || null, email, countryCode || null, phoneNumber || null, jobTitle || null, gender || null, req.params.id
+            'UPDATE users SET firstName = ?, lastName = ?, email = ?, countryIso = ?, countryCode = ?, phoneNumber = ?, jobTitle = ?, gender = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?',
+            firstName || null, lastName || null, email, countryIso || null, countryCode || null, phoneNumber || null, jobTitle || null, gender || null, req.params.id
         );
         
-        const user = await db.get('SELECT id, email, firstName, lastName, countryCode, phoneNumber, jobTitle, gender FROM users WHERE id = ?', req.params.id);
+        const user = await db.get('SELECT id, email, firstName, lastName, countryIso, countryCode, phoneNumber, jobTitle, gender FROM users WHERE id = ?', req.params.id);
         return res.json({ user });
     }));
 

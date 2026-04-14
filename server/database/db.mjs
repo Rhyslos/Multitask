@@ -16,6 +16,7 @@ export async function initializeDatabase() {
         password_hash TEXT NOT NULL,
         firstName TEXT,
         lastName TEXT,
+        countryIso TEXT,
         countryCode TEXT,
         phoneNumber TEXT,
         jobTitle TEXT,
@@ -81,9 +82,6 @@ export async function initializeDatabase() {
         FOREIGN KEY (workspaceID) REFERENCES workspaces (id) ON DELETE CASCADE
     );
 
-    -- Columns are first-class entities. Each column belongs to a tab and has
-    -- a stable UUID. columnIndex is purely for display ordering — it is never
-    -- used as an identifier anywhere in the application.
     CREATE TABLE IF NOT EXISTS kanban_columns (
         id TEXT PRIMARY KEY,
         tabID TEXT NOT NULL,
@@ -95,8 +93,6 @@ export async function initializeDatabase() {
         FOREIGN KEY (workspaceID) REFERENCES workspaces (id) ON DELETE CASCADE
     );
 
-    -- Lists belong to a column (via columnID). columnIndex is removed — order
-    -- and position are now determined entirely by the parent column's columnIndex.
     CREATE TABLE IF NOT EXISTS lists (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,

@@ -6,7 +6,8 @@ import { COUNTRIES, GENDER_OPTIONS, formatPhoneNumber } from '../components/inte
 
 const API = 'http://localhost:8080/api';
 
-function CountrySelect({ value, onChange }) {
+// input helper functions
+function InternalCountrySelect({ value, onChange }) {
     const [isOpen, setIsOpen] = useState(false);
     const [search, setSearch] = useState('');
     const wrapperRef = useRef(null);
@@ -77,6 +78,7 @@ function CountrySelect({ value, onChange }) {
     );
 }
 
+// user functions
 export default function UserProfile() {
     const { user, updateUser } = useAuth();
 
@@ -92,7 +94,6 @@ export default function UserProfile() {
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
 
-    const [showCurrent, setShowCurrent] = useState(false);
     const [showNew, setShowNew] = useState(false);
     const [showConfirm, setShowConfirm] = useState(false);
 
@@ -101,15 +102,29 @@ export default function UserProfile() {
     const [profileMessage, setProfileMessage] = useState({ type: '', text: '' });
     const [passwordMessage, setPasswordMessage] = useState({ type: '', text: '' });
 
-    const selectedCountry = COUNTRIES.find(c => c.iso === countryIso) || COUNTRIES.find(c => c.iso === 'us');
+    useEffect(() => {
+        if (user) {
+            setFirstName(user.firstName || '');
+            setLastName(user.lastName || '');
+            setEmail(user.email || '');
+            setCountryIso(user.countryIso || 'us');
+            setPhoneNumber(user.phoneNumber || '');
+            setJobTitle(user.jobTitle || '');
+            setGender(user.gender || '');
+        }
+    }, [user]);
+
+    const selectedCountry = COUNTRIES.find(c => c.iso === countryIso.toLowerCase) || COUNTRIES.find(c => c.iso === 'us');
 
     const displayName = (firstName.trim() || lastName.trim())
         ? `${firstName} ${lastName}`.trim()
         : email;
 
     function handleCountryChange(iso) {
-        setCountryIso(iso);
-        setPhoneNumber('');
+        if (iso !== countryIso) {
+            setCountryIso(iso);
+            setPhoneNumber('');
+        }
     }
 
     async function handleProfileUpdate(e) {
@@ -150,7 +165,7 @@ export default function UserProfile() {
         setPasswordMessage({ type: '', text: '' });
 
         if (newPassword !== confirmPassword) {
-            return setPasswordMessage({ type: 'error', text: 'New passwords do not match. Please try again.' });
+            return setPasswordMessage({ type: 'error', text: 'New passwords do not match.' });
         }
 
         setPasswordLoading(true);
@@ -168,9 +183,6 @@ export default function UserProfile() {
             setCurrentPassword('');
             setNewPassword('');
             setConfirmPassword('');
-            setShowCurrent(false);
-            setShowNew(false);
-            setShowConfirm(false);
             setPasswordMessage({ type: 'success', text: 'Password updated successfully.' });
         } catch (err) {
             setPasswordMessage({ type: 'error', text: err.message });
@@ -207,10 +219,6 @@ export default function UserProfile() {
                 <div className="profile-content">
                     <div className="profile-section">
                         <h2 className="profile-section-title">Personal Information</h2>
-                        <p className="profile-display-name">
-                            Displaying as: <strong>{displayName}</strong>
-                        </p>
-
                         <form className="profile-form" onSubmit={handleProfileUpdate}>
                             <div className="profile-row">
                                 <div className="profile-field">
@@ -221,6 +229,7 @@ export default function UserProfile() {
                                         value={firstName}
                                         onChange={e => setFirstName(e.target.value)}
                                         placeholder="Jane"
+                                        autoComplete="given-name"
                                     />
                                 </div>
                                 <div className="profile-field">
@@ -231,6 +240,7 @@ export default function UserProfile() {
                                         value={lastName}
                                         onChange={e => setLastName(e.target.value)}
                                         placeholder="Doe"
+                                        autoComplete="family-name"
                                     />
                                 </div>
                             </div>
@@ -243,6 +253,7 @@ export default function UserProfile() {
                                     value={email}
                                     onChange={e => setEmail(e.target.value)}
                                     required
+                                    autoComplete="email"
                                 />
                             </div>
 
@@ -250,15 +261,16 @@ export default function UserProfile() {
                                 <div className="profile-field profile-phone-field">
                                     <label>Phone Number</label>
                                     <div className="profile-phone-group">
-                                        <CountrySelect value={countryIso} onChange={handleCountryChange} />
+                                        <InternalCountrySelect value={countryIso} onChange={handleCountryChange} />
                                         <input
-                                            type="text"
+                                            type="tel"
                                             value={phoneNumber}
                                             onChange={e => {
                                                 const digits = e.target.value.replace(/\D/g, '').slice(0, selectedCountry.digits);
                                                 setPhoneNumber(formatPhoneNumber(digits, selectedCountry.format));
                                             }}
                                             placeholder={selectedCountry.format.replace(/X/g, '0')}
+                                            autoComplete="tel-national"
                                         />
                                     </div>
                                 </div>
@@ -273,6 +285,7 @@ export default function UserProfile() {
                                         value={jobTitle}
                                         onChange={e => setJobTitle(e.target.value)}
                                         placeholder="Software Engineer"
+                                        autoComplete="organization-title"
                                     />
                                 </div>
                                 <div className="profile-field">
@@ -306,16 +319,16 @@ export default function UserProfile() {
                     <div className="profile-section">
                         <h2 className="profile-section-title">Security</h2>
                         <form className="profile-form" onSubmit={handlePasswordChange} noValidate>
-
                             <div className="profile-field">
                                 <label htmlFor="currentPassword">Current Password <span className="profile-required">*</span></label>
                                 <div className="profile-password-wrapper">
                                     <input
                                         id="currentPassword"
-                                        type={showCurrent ? "text" : "password"}
+                                        type="password"
                                         value={currentPassword}
                                         onChange={e => setCurrentPassword(e.target.value)}
                                         placeholder="••••••••"
+                                        autoComplete="current-password"
                                         required
                                     />
                                 </div>
@@ -330,6 +343,7 @@ export default function UserProfile() {
                                         value={newPassword}
                                         onChange={e => setNewPassword(e.target.value)}
                                         placeholder="••••••••"
+                                        autoComplete="new-password"
                                         required
                                     />
                                     <button
@@ -352,6 +366,7 @@ export default function UserProfile() {
                                         value={confirmPassword}
                                         onChange={e => setConfirmPassword(e.target.value)}
                                         placeholder="••••••••"
+                                        autoComplete="new-password"
                                         required
                                     />
                                     <button

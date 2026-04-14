@@ -61,12 +61,18 @@ export function AuthProvider({ children }) {
     }
 
     // In useAuth.jsx
-    async function register(email, password, countryCode) {
+    async function register(email, password, countryCode, countryIso) {
         const res = await fetch(`${API}/users/register`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, password, countryCode }), // Add it to the payload
+            body: JSON.stringify({ 
+                email, 
+                password, 
+                countryCode, 
+                countryIso,
+            }),
         });
+
         const data = await res.json();
         if (!res.ok) throw new Error(data.error);
 

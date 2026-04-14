@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { appName } from '../App';
 import CountrySelect from '../components/international/CountrySelect';
+import { COUNTRIES } from '../components/international/constants';
 
 export default function Register() {
     const { register } = useAuth();
@@ -10,12 +11,14 @@ export default function Register() {
 
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [countryCode, setCountryCode] = useState('+1');
-    const [agreedToTerms, setAgreedToTerms] = useState(false); // NEW: State for the checkbox
+    const [agreedToTerms, setAgreedToTerms] = useState(false);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+    const [countryIso, setCountryIso] = useState('us');
 
-    // form handlers
+    const selectedCountry = COUNTRIES.find(c => c.iso === countryIso) || COUNTRIES[0];
+
+    // user functions
     async function handleSubmit(e) {
         e.preventDefault();
         setError('');
@@ -27,7 +30,7 @@ export default function Register() {
 
         setLoading(true);
         try {
-            await register(email, password, countryCode); 
+            await register(email, password, selectedCountry.value, countryIso);
             navigate('/dashboard');
         } catch (err) {
             setError(err.message);
@@ -87,11 +90,10 @@ export default function Register() {
                     <div className="auth-field">
                         <label>Country</label>
                         <div style={{ height: '42px', zIndex: 10 }}>
-                            <CountrySelect value={countryCode} onChange={setCountryCode} />
+                            <CountrySelect value={countryIso} onChange={setCountryIso} />
                         </div>
                     </div>
 
-                    {/* NEW: Explicit Consent Checkbox */}
                     <div className="auth-checkbox-group">
                         <input 
                             type="checkbox" 
@@ -113,7 +115,6 @@ export default function Register() {
                     <button
                         type="submit"
                         className="auth-btn"
-                        // Require the checkbox to be true to submit
                         disabled={loading || !email || !password || !agreedToTerms}
                     >
                         {loading ? 'Creating account…' : 'Create account'}

@@ -34,12 +34,20 @@ export default function Navbar() {
 
                 {inWorkspace && (
                     <div className="navbar-pages">
+                        <button 
+                            className={`navbar-page-btn ${isActive('graph editor') ? 'active' : ''}`}
+                            onClick={() => navTo('graph editor')}
+                        >
+                            Graph Editor
+                        </button>
+
                         <button
                             className={`navbar-page-btn ${isActive('kanban') ? 'active' : ''}`}
                             onClick={() => navTo('kanban')}
                         >
                             Kanban
                         </button>
+                        
                         <button
                             className={`navbar-page-btn ${isActive('notation') ? 'active' : ''}`}
                             onClick={() => navTo('notation')}

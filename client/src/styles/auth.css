@@ -49,6 +49,26 @@
     to   { transform: translate(30px, 20px) scale(1.06); }
 }
 
+/* Checkbox styling */
+.auth-checkbox-group {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+.auth-checkbox-group input[type="checkbox"] {
+    margin-top: 2px;
+    cursor: pointer;
+    accent-color: var(--ink); /* Matches your dark theme */
+}
+
+.auth-checkbox-label {
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.4;
+    cursor: pointer;
+}
 
 /* Panel */
 .auth-panel {
@@ -205,22 +225,48 @@
 }
 
 
-/* Footer */
 .auth-footer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    margin-top: 24px;
+    text-align: center;
+    font-size: 14px;
+    color: var(--muted);
+}
+
+.auth-footer-legal {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
-    margin-top: 24px;
-    font-size: 13px;
-    color: var(--muted);
+    flex-wrap: wrap;
+    gap: 8px;
+    font-size: 12px;
 }
 
 .auth-link {
     color: var(--accent);
+    text-decoration: none;
+    font-weight: 500;
+    transition: opacity 0.15s;
+}
+
+.auth-link:hover {
+    opacity: 0.8;
+}
+
+.auth-footer-prompt {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    font-size: 16px; /* Increased size */
+}
+
+.auth-footer-prompt .auth-link {
+    font-size: 14px; /* Slightly larger for the clickable action */
     font-weight: 600;
-    text-decoration: underline;
-    text-underline-offset: 3px;
 }
 
 .auth-link:hover { color: #a03e1f; }

@@ -6,6 +6,7 @@ const AuthContext = createContext(null);
 const API = 'http://localhost:8080/api';
 const STORAGE_KEY = 'studyspace_user';
 
+// context provider
 export function AuthProvider({ children }) {
     const { setUserEmail } = useSync();
 
@@ -18,8 +19,6 @@ export function AuthProvider({ children }) {
         }
     });
 
-    // On mount, if we already have a stored user (page refresh), open the SSE
-    // connection immediately — don't wait for an explicit login call.
     useEffect(() => {
         if (user?.id) {
             SyncManager.getInstance().then(async sm => {
@@ -61,11 +60,12 @@ export function AuthProvider({ children }) {
         }
     }
 
-    async function register(email, password) {
+    // In useAuth.jsx
+    async function register(email, password, countryCode) {
         const res = await fetch(`${API}/users/register`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, password }),
+            body: JSON.stringify({ email, password, countryCode }), // Add it to the payload
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error);
@@ -85,8 +85,20 @@ export function AuthProvider({ children }) {
         SyncManager.reset();
     }
 
+    function updateUser(updatedData) {
+        setUser(prev => {
+            const newUser = { ...prev, ...updatedData };
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(newUser));
+            return newUser;
+        });
+        
+        if (updatedData.email && updatedData.email !== user?.email) {
+            setUserEmail(updatedData.email);
+        }
+    }
+
     return (
-        <AuthContext.Provider value={{ user, login, register, logout }}>
+        <AuthContext.Provider value={{ user, login, register, logout, updateUser }}>
             {children}
         </AuthContext.Provider>
     );

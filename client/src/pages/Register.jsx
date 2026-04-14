@@ -10,10 +10,12 @@ export default function Register() {
 
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [countryCode, setCountryCode] = useState('+1'); // Defaulting to +1
+    const [countryCode, setCountryCode] = useState('+1');
+    const [agreedToTerms, setAgreedToTerms] = useState(false); // NEW: State for the checkbox
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
 
+    // form handlers
     async function handleSubmit(e) {
         e.preventDefault();
         setError('');
@@ -25,7 +27,6 @@ export default function Register() {
 
         setLoading(true);
         try {
-            // Pass the new parameter to the hook
             await register(email, password, countryCode); 
             navigate('/dashboard');
         } catch (err) {
@@ -85,10 +86,26 @@ export default function Register() {
 
                     <div className="auth-field">
                         <label>Country</label>
-                        {/* We wrap it to ensure it matches your auth input heights */}
                         <div style={{ height: '42px', zIndex: 10 }}>
                             <CountrySelect value={countryCode} onChange={setCountryCode} />
                         </div>
+                    </div>
+
+                    {/* NEW: Explicit Consent Checkbox */}
+                    <div className="auth-checkbox-group">
+                        <input 
+                            type="checkbox" 
+                            id="terms" 
+                            checked={agreedToTerms}
+                            onChange={e => setAgreedToTerms(e.target.checked)}
+                            disabled={loading}
+                        />
+                        <label htmlFor="terms" className="auth-checkbox-label">
+                            I have read and agree to the 
+                            <Link to="/tos" className="auth-link" style={{ fontSize: '12px', margin: '0 4px' }}>Terms of Service</Link>
+                            and 
+                            <Link to="/privacy" className="auth-link" style={{ fontSize: '12px', margin: '0 4px' }}>Privacy Policy</Link>.
+                        </label>
                     </div>
 
                     {error && <p className="auth-error" role="alert">{error}</p>}
@@ -96,15 +113,18 @@ export default function Register() {
                     <button
                         type="submit"
                         className="auth-btn"
-                        disabled={loading || !email || !password}
+                        // Require the checkbox to be true to submit
+                        disabled={loading || !email || !password || !agreedToTerms}
                     >
                         {loading ? 'Creating account…' : 'Create account'}
                     </button>
                 </form>
 
                 <div className="auth-footer">
-                    <span>Already have an account?</span>
-                    <Link to="/login" className="auth-link">Sign in</Link>
+                    <div className="auth-footer-prompt">
+                        <span>Already have an account?</span>
+                        <Link to="/login" className="auth-link">Sign in</Link>
+                    </div>
                 </div>
             </div>
         </div>

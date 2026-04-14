@@ -2,24 +2,22 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { appName } from '../App';
+import CountrySelect from '../components/international/CountrySelect';
 
-
-// Page
 export default function Register() {
     const { register } = useAuth();
     const navigate = useNavigate();
 
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [countryCode, setCountryCode] = useState('+1'); // Defaulting to +1
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
 
-    // form submission
     async function handleSubmit(e) {
         e.preventDefault();
         setError('');
 
-        // Basic email format validation
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(email)) {
             return setError('Please enter a valid email address (e.g., name@example.com).');
@@ -27,7 +25,8 @@ export default function Register() {
 
         setLoading(true);
         try {
-            await register(email, password); 
+            // Pass the new parameter to the hook
+            await register(email, password, countryCode); 
             navigate('/dashboard');
         } catch (err) {
             setError(err.message);
@@ -82,6 +81,14 @@ export default function Register() {
                             disabled={loading}
                             required
                         />
+                    </div>
+
+                    <div className="auth-field">
+                        <label>Country</label>
+                        {/* We wrap it to ensure it matches your auth input heights */}
+                        <div style={{ height: '42px', zIndex: 10 }}>
+                            <CountrySelect value={countryCode} onChange={setCountryCode} />
+                        </div>
                     </div>
 
                     {error && <p className="auth-error" role="alert">{error}</p>}

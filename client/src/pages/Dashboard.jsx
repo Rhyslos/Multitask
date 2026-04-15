@@ -6,8 +6,8 @@ import { useAnimatedRemoval } from '../hooks/useAnimatedRemoval';
 import Navbar from '../components/Navbar';
 import DefaultSubbar from '../components/subbar/DefaultSubbar';
 import CategoryFilter from '../components/CategoryFilter';
-import CreateWorkspaceModal from '../components/CreateWorkspaceModal';
-import WorkspaceSettingsModal from '../components/WorkspaceSettingsModal';
+import CreateWorkspaceModal from '../components/workspace/CreateWorkspaceModal';
+import WorkspaceSettingsModal from '../components/workspace/WorkspaceSettingsModal';
 import AnimatedRemoval from '../components/AnimatedRemoval';
 
 

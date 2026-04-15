@@ -1,5 +1,5 @@
 import WorkspaceCard from './WorkspaceCard';
-import CategoryFilter from './CategoryFilter';
+import CategoryFilter from '../CategoryFilter';
 
 
 // Component

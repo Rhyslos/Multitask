@@ -61,14 +61,13 @@ export function AuthProvider({ children }) {
     }
 
     // In useAuth.jsx
-    async function register(email, password, countryCode, countryIso) {
+    async function register(email, password, countryIso) {
         const res = await fetch(`${API}/users/register`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
                 email, 
                 password, 
-                countryCode, 
                 countryIso,
             }),
         });

@@ -1,9 +1,9 @@
+// user functions
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { appName } from '../App';
 import CountrySelect from '../components/international/CountrySelect';
-import { COUNTRIES } from '../components/international/constants';
 
 export default function Register() {
     const { register } = useAuth();
@@ -16,9 +16,7 @@ export default function Register() {
     const [loading, setLoading] = useState(false);
     const [countryIso, setCountryIso] = useState('us');
 
-    const selectedCountry = COUNTRIES.find(c => c.iso === countryIso) || COUNTRIES[0];
-
-    // user functions
+    // form submission functions
     async function handleSubmit(e) {
         e.preventDefault();
         setError('');
@@ -30,7 +28,7 @@ export default function Register() {
 
         setLoading(true);
         try {
-            await register(email, password, selectedCountry.value, countryIso);
+            await register(email, password, countryIso);
             navigate('/dashboard');
         } catch (err) {
             setError(err.message);

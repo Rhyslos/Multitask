@@ -28,7 +28,7 @@ export default function createUserRouter(db) {
 
     // user registration route
     router.post('/register', catchAsync(async (req, res) => {
-        const { email, password, countryCode, countryIso } = req.body;
+        const { email, password, countryIso } = req.body;
 
         if (!email || !password)
             return res.status(400).json({ error: 'Email and password are required.' });
@@ -43,8 +43,8 @@ export default function createUserRouter(db) {
         const id = crypto.randomUUID();
 
         await db.run(
-            'INSERT INTO users (id, email, password_hash, countryCode, countryIso) VALUES (?, ?, ?, ?, ?)',
-            id, email, password_hash, countryCode || '+1', countryIso || 'us'
+            'INSERT INTO users (id, email, password_hash, countryIso) VALUES (?, ?, ?, ?)',
+            id, email, password_hash, countryIso || 'us'
         );
 
         return res.status(201).json({ 
@@ -53,10 +53,9 @@ export default function createUserRouter(db) {
                 email, 
                 firstName: null, 
                 lastName: null, 
-                countryCode: countryCode || '+1',
                 countryIso: countryIso || 'us',
                 phoneNumber: null, 
-                jobTitle: null, 
+                skillset: '[]', 
                 gender: null 
             } 
         });
@@ -84,18 +83,17 @@ export default function createUserRouter(db) {
                 firstName: user.firstName,
                 lastName: user.lastName,
                 countryIso: user.countryIso,
-                countryCode: user.countryCode,
                 phoneNumber: user.phoneNumber,
-                jobTitle: user.jobTitle,
+                skillset: user.skillset,
                 gender: user.gender
             } 
         });
     }));
 
-    // user functions
+    // user profile functions
     router.get('/:id/profile', catchAsync(async (req, res) => {
         const user = await db.get(
-            'SELECT id, email, firstName, lastName, countryIso, countryCode, phoneNumber, jobTitle, gender FROM users WHERE id = ?',
+            'SELECT id, email, firstName, lastName, countryIso, phoneNumber, skillset, gender FROM users WHERE id = ?',
             req.params.id
         );
 
@@ -106,18 +104,21 @@ export default function createUserRouter(db) {
         return res.json({ user });
     }));
 
+    // profile update route
     router.patch('/:id/profile', catchAsync(async (req, res) => {
-        const { firstName, lastName, email, countryIso, countryCode, phoneNumber, jobTitle, gender } = req.body;
+        const { firstName, lastName, email, countryIso, phoneNumber, skillset, gender } = req.body;
         
         const existing = await db.get('SELECT id FROM users WHERE email = ? AND id != ?', email, req.params.id);
         if (existing) return res.status(409).json({ error: 'Email already in use by another account.' });
 
+        const skillsetStr = skillset ? JSON.stringify(skillset) : '[]';
+
         await db.run(
-            'UPDATE users SET firstName = ?, lastName = ?, email = ?, countryIso = ?, countryCode = ?, phoneNumber = ?, jobTitle = ?, gender = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?',
-            firstName || null, lastName || null, email, countryIso || null, countryCode || null, phoneNumber || null, jobTitle || null, gender || null, req.params.id
+            'UPDATE users SET firstName = ?, lastName = ?, email = ?, countryIso = ?, phoneNumber = ?, skillset = ?, gender = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?',
+            firstName || null, lastName || null, email, countryIso || null, phoneNumber || null, skillsetStr, gender || null, req.params.id
         );
         
-        const user = await db.get('SELECT id, email, firstName, lastName, countryIso, countryCode, phoneNumber, jobTitle, gender FROM users WHERE id = ?', req.params.id);
+        const user = await db.get('SELECT id, email, firstName, lastName, countryIso, phoneNumber, skillset, gender FROM users WHERE id = ?', req.params.id);
         return res.json({ user });
     }));
 

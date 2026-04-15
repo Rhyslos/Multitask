@@ -79,16 +79,25 @@ function InternalCountrySelect({ value, onChange }) {
 }
 
 // user functions
+// user functions
 export default function UserProfile() {
     const { user, updateUser } = useAuth();
 
+    // state initialization functions
     const [firstName, setFirstName] = useState(user?.firstName || '');
     const [lastName, setLastName] = useState(user?.lastName || '');
     const [email, setEmail] = useState(user?.email || '');
     const [countryIso, setCountryIso] = useState(user?.countryIso || 'us');
     const [phoneNumber, setPhoneNumber] = useState(user?.phoneNumber || '');
-    const [jobTitle, setJobTitle] = useState(user?.jobTitle || '');
     const [gender, setGender] = useState(user?.gender || '');
+    
+    const [skillset, setSkillset] = useState(() => {
+        try {
+            return user?.skillset ? JSON.parse(user.skillset) : [''];
+        } catch {
+            return [''];
+        }
+    });
 
     const [currentPassword, setCurrentPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
@@ -102,6 +111,7 @@ export default function UserProfile() {
     const [profileMessage, setProfileMessage] = useState({ type: '', text: '' });
     const [passwordMessage, setPasswordMessage] = useState({ type: '', text: '' });
 
+    // effect handler functions
     useEffect(() => {
         if (user) {
             setFirstName(user.firstName || '');
@@ -109,17 +119,23 @@ export default function UserProfile() {
             setEmail(user.email || '');
             setCountryIso(user.countryIso || 'us');
             setPhoneNumber(user.phoneNumber || '');
-            setJobTitle(user.jobTitle || '');
             setGender(user.gender || '');
+            try {
+                setSkillset(user.skillset ? JSON.parse(user.skillset) : ['']);
+            } catch {
+                setSkillset(['']);
+            }
         }
     }, [user]);
 
-    const selectedCountry = COUNTRIES.find(c => c.iso === countryIso.toLowerCase) || COUNTRIES.find(c => c.iso === 'us');
+    // data mapping functions
+    const selectedCountry = COUNTRIES.find(c => c.iso === countryIso.toLowerCase()) || COUNTRIES.find(c => c.iso === 'us');
 
     const displayName = (firstName.trim() || lastName.trim())
         ? `${firstName} ${lastName}`.trim()
         : email;
 
+    // event handler functions
     function handleCountryChange(iso) {
         if (iso !== countryIso) {
             setCountryIso(iso);
@@ -127,12 +143,29 @@ export default function UserProfile() {
         }
     }
 
+    function handleSkillChange(index, value) {
+        const newSkills = [...skillset];
+        newSkills[index] = value;
+        setSkillset(newSkills);
+    }
+
+    function addSkillField() {
+        setSkillset([...skillset, '']);
+    }
+
+    function removeSkillField(index) {
+        const newSkills = skillset.filter((_, i) => i !== index);
+        setSkillset(newSkills.length ? newSkills : ['']);
+    }
+
+    // api submission functions
     async function handleProfileUpdate(e) {
         e.preventDefault();
         setProfileLoading(true);
         setProfileMessage({ type: '', text: '' });
 
         try {
+            const filteredSkills = skillset.filter(skill => skill.trim() !== '');
             const res = await fetch(`${API}/users/${user.id}/profile`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
@@ -141,9 +174,8 @@ export default function UserProfile() {
                     lastName,
                     email,
                     countryIso,
-                    countryCode: selectedCountry.code,
                     phoneNumber,
-                    jobTitle,
+                    skillset: filteredSkills,
                     gender
                 }),
             });
@@ -191,6 +223,7 @@ export default function UserProfile() {
         }
     }
 
+    // render helper functions
     const EyeIcon = ({ isVisible }) => (
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '16px', height: '16px' }}>
             {isVisible ? (
@@ -274,20 +307,6 @@ export default function UserProfile() {
                                         />
                                     </div>
                                 </div>
-                            </div>
-
-                            <div className="profile-row">
-                                <div className="profile-field">
-                                    <label htmlFor="jobTitle">Job Title</label>
-                                    <input
-                                        id="jobTitle"
-                                        type="text"
-                                        value={jobTitle}
-                                        onChange={e => setJobTitle(e.target.value)}
-                                        placeholder="Software Engineer"
-                                        autoComplete="organization-title"
-                                    />
-                                </div>
                                 <div className="profile-field">
                                     <label htmlFor="gender">Gender (Optional)</label>
                                     <select
@@ -302,6 +321,36 @@ export default function UserProfile() {
                                         ))}
                                     </select>
                                 </div>
+                            </div>
+
+                            <div className="profile-field">
+                                <label>Skillset</label>
+                                {skillset.map((skill, index) => (
+                                    <div key={index} style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                                        <input
+                                            type="text"
+                                            value={skill}
+                                            onChange={e => handleSkillChange(index, e.target.value)}
+                                            placeholder="e.g., React, Graphic Design, Python"
+                                        />
+                                        <button 
+                                            type="button" 
+                                            onClick={() => removeSkillField(index)}
+                                            className="profile-btn"
+                                            style={{ marginTop: 0 }}
+                                        >
+                                            ✕
+                                        </button>
+                                    </div>
+                                ))}
+                                <button 
+                                    type="button" 
+                                    onClick={addSkillField} 
+                                    className="profile-btn"
+                                    style={{ width: 'fit-content' }}
+                                >
+                                    + Add Skill
+                                </button>
                             </div>
 
                             {profileMessage.text && (

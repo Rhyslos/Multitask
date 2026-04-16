@@ -5,11 +5,6 @@ import { catchAsync } from './apiUtils.mjs';
 export default function createKanbanRouter(db) {
     const router = express.Router();
 
-
-    // -------------------------------------------------------------------------
-    // Tabs
-    // -------------------------------------------------------------------------
-
     router.get('/tabs/:workspaceId', catchAsync(async (req, res) => {
         const { workspaceId } = req.params;
 
@@ -78,13 +73,6 @@ export default function createKanbanRouter(db) {
         res.json({ message: 'Tabs reordered successfully' });
     }));
 
-
-    // -------------------------------------------------------------------------
-    // Columns
-    // A column is a stable entity (UUID) that owns lists. columnIndex is only
-    // used for display ordering and is never used as an identifier.
-    // -------------------------------------------------------------------------
-
     router.post('/columns', catchAsync(async (req, res) => {
         const { id, tabID, workspaceID, columnIndex } = req.body;
 
@@ -100,7 +88,6 @@ export default function createKanbanRouter(db) {
     router.delete('/columns/:columnId', catchAsync(async (req, res) => {
         const { columnId } = req.params;
 
-        // Soft-delete column and cascade to its lists and their tasks
         await db.run(
             'UPDATE kanban_columns SET isDeleted = 1, updatedAt = CURRENT_TIMESTAMP WHERE id = ?',
             [columnId]
@@ -117,7 +104,6 @@ export default function createKanbanRouter(db) {
         res.json({ message: 'Column deleted successfully' });
     }));
 
-    // Reorder: accepts an array of { id, columnIndex } and updates each column
     router.put('/columns/reorder', catchAsync(async (req, res) => {
         const { updates } = req.body;
 
@@ -130,11 +116,6 @@ export default function createKanbanRouter(db) {
 
         res.json({ message: 'Columns reordered successfully' });
     }));
-
-
-    // -------------------------------------------------------------------------
-    // Board — fetch columns + lists + tasks for a tab in one request
-    // -------------------------------------------------------------------------
 
     router.get('/board/:workspaceId/:tabId', catchAsync(async (req, res) => {
         const { workspaceId, tabId } = req.params;
@@ -167,11 +148,6 @@ export default function createKanbanRouter(db) {
 
         res.json({ columns, lists, tasks });
     }));
-
-
-    // -------------------------------------------------------------------------
-    // Lists
-    // -------------------------------------------------------------------------
 
     router.post('/lists', catchAsync(async (req, res) => {
         const { id, name, category, color, direction, columnID, workspaceID, tabID } = req.body;
@@ -212,17 +188,12 @@ export default function createKanbanRouter(db) {
         res.json({ message: 'List deleted successfully' });
     }));
 
-
-    // -------------------------------------------------------------------------
-    // Tasks
-    // -------------------------------------------------------------------------
-
     router.post('/tasks', catchAsync(async (req, res) => {
-        const { id, title, description, isCompleted, originalCategory, color, listID, taskOrder } = req.body;
+        const { id, title, description, isCompleted, originalCategory, color, listID, taskOrder, deadline, subtasks } = req.body;
 
         await db.run(
-            'INSERT INTO tasks (id, title, description, isCompleted, originalCategory, color, listID, taskOrder) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-            [id, title ?? 'New Task', description ?? '', isCompleted ?? 0, originalCategory ?? '', color ?? '', listID, taskOrder ?? 0]
+            'INSERT INTO tasks (id, title, description, isCompleted, originalCategory, color, listID, taskOrder, deadline, subtasks) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [id, title ?? 'New Task', description ?? '', isCompleted ?? 0, originalCategory ?? '', color ?? '', listID, taskOrder ?? 0, deadline ?? null, subtasks ? JSON.stringify(subtasks) : null]
         );
 
         const task = await db.get('SELECT * FROM tasks WHERE id = ?', [id]);
@@ -244,11 +215,11 @@ export default function createKanbanRouter(db) {
 
     router.put('/tasks/:taskId', catchAsync(async (req, res) => {
         const { taskId } = req.params;
-        const { title, description, isCompleted, listID, originalCategory, color, taskOrder } = req.body;
+        const { title, description, isCompleted, listID, originalCategory, color, taskOrder, deadline, subtasks } = req.body;
 
         await db.run(
-            'UPDATE tasks SET title = ?, description = ?, isCompleted = ?, listID = ?, originalCategory = ?, color = ?, taskOrder = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?',
-            [title, description, isCompleted, listID, originalCategory, color, taskOrder, taskId]
+            'UPDATE tasks SET title = ?, description = ?, isCompleted = ?, listID = ?, originalCategory = ?, color = ?, taskOrder = ?, deadline = ?, subtasks = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?',
+            [title, description, isCompleted, listID, originalCategory, color, taskOrder, deadline, subtasks ? JSON.stringify(subtasks) : null, taskId]
         );
 
         res.json({ message: 'Task updated successfully' });

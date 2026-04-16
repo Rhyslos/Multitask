@@ -1,7 +1,6 @@
 import sqlite3 from 'sqlite3';
 import { open } from 'sqlite';
 
-// database initialization functions
 export async function initializeDatabase() {
     const db = await open({
         filename: './database/superSecretHighSecurityDataBase.db',
@@ -18,8 +17,9 @@ export async function initializeDatabase() {
         firstName TEXT,
         lastName TEXT,
         countryIso TEXT,
+        countryCode TEXT,
         phoneNumber TEXT,
-        skillset TEXT DEFAULT '[]',
+        jobTitle TEXT,
         gender TEXT,
         createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
         updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -118,6 +118,8 @@ export async function initializeDatabase() {
         color TEXT,
         listID TEXT NOT NULL,
         taskOrder INTEGER NOT NULL DEFAULT 0,
+        deadline TEXT,
+        subtasks TEXT,
         updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
         isDeleted INTEGER DEFAULT 0,
         FOREIGN KEY (listID) REFERENCES lists (id) ON DELETE CASCADE

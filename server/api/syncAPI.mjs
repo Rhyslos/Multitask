@@ -139,16 +139,18 @@ async function applyClientChanges(db, changes) {
     }
 
     // 6. Tasks
-    if (changes.tasks) {
+   if (changes.tasks) {
         for (const t of changes.tasks) {
             try {
+                const subtasksStr = t.subtasks ? (typeof t.subtasks === 'string' ? t.subtasks : JSON.stringify(t.subtasks)) : null;
+                
                 await db.run(
-                    `INSERT INTO tasks (id, title, description, isCompleted, originalCategory, color, listID, taskOrder, updatedAt, isDeleted) 
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
+                    `INSERT INTO tasks (id, title, description, isCompleted, originalCategory, color, listID, taskOrder, deadline, subtasks, updatedAt, isDeleted) 
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
                      ON CONFLICT(id) DO UPDATE SET 
-                     title=excluded.title, description=excluded.description, isCompleted=excluded.isCompleted, originalCategory=excluded.originalCategory, color=excluded.color, listID=excluded.listID, taskOrder=excluded.taskOrder, updatedAt=excluded.updatedAt, isDeleted=excluded.isDeleted 
+                     title=excluded.title, description=excluded.description, isCompleted=excluded.isCompleted, originalCategory=excluded.originalCategory, color=excluded.color, listID=excluded.listID, taskOrder=excluded.taskOrder, deadline=excluded.deadline, subtasks=excluded.subtasks, updatedAt=excluded.updatedAt, isDeleted=excluded.isDeleted 
                      WHERE excluded.updatedAt > tasks.updatedAt`,
-                    [t.id, t.title, t.description, t.isCompleted ? 1 : 0, t.originalCategory, t.color, t.listID, t.taskOrder, t.updatedAt, t.isDeleted]
+                    [t.id, t.title, t.description, t.isCompleted ? 1 : 0, t.originalCategory, t.color, t.listID, t.taskOrder, t.deadline, subtasksStr, t.updatedAt, t.isDeleted]
                 );
             } catch (e) {
                 console.warn(`[SYNC] Task ${t.id} skipped: Parent missing`);

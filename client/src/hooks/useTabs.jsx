@@ -11,6 +11,13 @@ export function useTabs(workspaceID) {
     const loadLocal = useCallback(async () => {
         if (!sm || !workspaceID) return;
         
+        const wsCheck = await sm.query('SELECT id FROM workspaces WHERE id = ?', [workspaceID]);
+        if (wsCheck.length === 0) {
+            setTabs([]);
+            setLoading(false);
+            return;
+        }
+
         let fetched = await sm.query(
             'SELECT * FROM kanban_tabs WHERE workspaceID = ? AND isArchived = 0 AND isDeleted = 0 ORDER BY tabOrder ASC',
             [workspaceID]

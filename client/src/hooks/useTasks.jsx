@@ -12,6 +12,7 @@ export function useTasks(listIDs) {
     // Stable serialized key so useCallback doesn't change on every render
     const listIDsKey = JSON.stringify(listIDs);
 
+    // query functions
     const loadLocal = useCallback(async () => {
         if (!sm || !listIDs || listIDs.length === 0) {
             setTasks([]);
@@ -22,12 +23,18 @@ export function useTasks(listIDs) {
         const placeholders = listIDs.map(() => '?').join(',');
         const rows = await sm.query(
             `SELECT * FROM tasks 
-             WHERE listID IN (${placeholders}) AND isDeleted = 0 
-             ORDER BY taskOrder ASC`,
+            WHERE listID IN (${placeholders}) AND isDeleted = 0 
+            ORDER BY taskOrder ASC`,
             listIDs
         );
 
-        setTasks(prev => JSON.stringify(prev) === JSON.stringify(rows) ? prev : rows);
+    // parsing functions
+        const parsedRows = rows.map(row => ({
+            ...row,
+            subtasks: row.subtasks ? JSON.parse(row.subtasks) : []
+        }));
+
+        setTasks(prev => JSON.stringify(prev) === JSON.stringify(parsedRows) ? prev : parsedRows);
         setLoading(false);
     }, [sm, listIDsKey]);
 
@@ -38,6 +45,7 @@ export function useTasks(listIDs) {
         return unsub;
     }, [sm, loadLocal]);
 
+    // add functions
     async function addTask(listID, listCategory, listColor) {
         if (!sm || !listID) return null;
 
@@ -45,15 +53,15 @@ export function useTasks(listIDs) {
         const id = crypto.randomUUID();
 
         await sm.execute(
-            `INSERT INTO tasks (id, title, description, isCompleted, originalCategory, color, listID, taskOrder) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [id, 'New Task', '', 0, listCategory ?? '', listColor ?? '', listID, existingTasks.length]
+            `INSERT INTO tasks (id, title, description, isCompleted, originalCategory, color, listID, taskOrder, deadline, subtasks) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [id, 'New Task', '', 0, listCategory ?? '', listColor ?? '', listID, existingTasks.length, null, null]
         );
 
         return id;
     }
 
-    // Merges changes into the existing task record — never silently drops fields.
+    // update functions
     async function updateTask(taskID, changes) {
         if (!sm) return;
 
@@ -61,12 +69,15 @@ export function useTasks(listIDs) {
         if (!task) return;
 
         const updated = { ...task, ...changes };
+        const subtasksString = updated.subtasks ? JSON.stringify(updated.subtasks) : null;
+
         await sm.execute(
             `UPDATE tasks SET 
                 title = ?, description = ?, isCompleted = ?, 
                 listID = ?, originalCategory = ?, color = ?, taskOrder = ?,
+                deadline = ?, subtasks = ?,
                 updatedAt = CURRENT_TIMESTAMP
-             WHERE id = ?`,
+            WHERE id = ?`,
             [
                 updated.title,
                 updated.description,
@@ -75,6 +86,8 @@ export function useTasks(listIDs) {
                 updated.originalCategory,
                 updated.color,
                 updated.taskOrder,
+                updated.deadline,
+                subtasksString,
                 taskID,
             ]
         );

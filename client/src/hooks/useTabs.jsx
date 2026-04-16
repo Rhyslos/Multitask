@@ -1,7 +1,8 @@
-// user functions
+// react functions
 import { useState, useEffect, useCallback } from 'react';
 import { useSync } from './useSync';
 
+// hook functions
 export function useTabs(workspaceID) {
     const { sm } = useSync();
     const [tabs, setTabs] = useState([]);
@@ -10,6 +11,8 @@ export function useTabs(workspaceID) {
 
     const loadLocal = useCallback(async () => {
         if (!sm || !workspaceID) return;
+        
+        console.log(`[1. useTabs] Querying local DB for workspace: ${workspaceID}`);
         
         const wsCheck = await sm.query('SELECT id FROM workspaces WHERE id = ?', [workspaceID]);
         if (wsCheck.length === 0) {
@@ -23,8 +26,12 @@ export function useTabs(workspaceID) {
             [workspaceID]
         );
 
+        console.log(`[2. useTabs] Local DB returned ${fetched.length} tabs.`);
+
         if (fetched.length === 0) {
             const id = crypto.randomUUID();
+            console.warn(`[3. useTabs] 0 tabs found! Creating default 'Main' tab with ID: ${id}`);
+            
             await sm.execute(
                 `INSERT OR IGNORE INTO kanban_tabs (id, name, color, tabOrder, isArchived, workspaceID) VALUES (?,?,?,?,?,?)`,
                 [id, 'Main', '#6c8ebf', 0, 0, workspaceID]

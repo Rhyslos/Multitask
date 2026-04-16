@@ -138,15 +138,6 @@ export default function KanbanTabs({ tabs, activeTabId, onSelect, onAdd, onUpdat
                                 >
                                     ●
                                 </button>
-                                {tabs.length > 1 && (
-                                    <button
-                                        className="kanban-tab-archive-btn"
-                                        title="Archive tab"
-                                        onClick={e => { e.stopPropagation(); onArchive(tab.id); }}
-                                    >
-                                        ✕
-                                    </button>
-                                )}
                             </div>
                         )}
                     </div>

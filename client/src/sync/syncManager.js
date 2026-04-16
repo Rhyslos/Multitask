@@ -1,3 +1,4 @@
+// initialization functions
 import DbWorker from './dbWorker.js?worker';
 
 const API = 'http://localhost:8080/api';
@@ -23,6 +24,7 @@ const SYNC_TABLES = ['categories', 'workspaces', 'kanban_tabs', 'kanban_columns'
 
 let instancePromise = null;
 
+// class functions
 export class SyncManager {
     constructor() {
         this._worker = null;
@@ -35,7 +37,7 @@ export class SyncManager {
         this._pendingRequests = new Map();
         this._syncing = false;
         this._syncDebounceTimer = null;
-        this._syncNowDebounce = null; // Added for pull debouncing
+        this._syncNowDebounce = null; 
         this._dbReadyResolver = null;
         this._dbReadyPromise = new Promise(res => { this._dbReadyResolver = res; });
     }
@@ -127,7 +129,6 @@ export class SyncManager {
                 this._setOnline(true);
                 const syncKey = `sync_time_${this._userId}`;
                 
-                // Overlap flush check by 2 seconds
                 let safeTime = localStorage.getItem(syncKey) || '1970-01-01 00:00:00';
                 if (safeTime !== '1970-01-01 00:00:00') {
                     const d = new Date(safeTime.replace(' ', 'T') + 'Z');
@@ -182,14 +183,13 @@ export class SyncManager {
         await this._dbReadyPromise;
         await this._execWorker('EXECUTE', { sql, params });
         this._notify();
-        if (this._online) this.sync(); // Local changes SHOULD trigger an outbound push
+        if (this._online) this.sync(); 
     }
 
     async runBatch(statements) {
         await this._dbReadyPromise;
         await this._execWorker('BATCH', { statements });
         this._notify();
-        // FIX 1: Removed `if (this._online) this.sync();` to prevent the infinite ping-pong loop!
     }
 
     async sync() {
@@ -204,7 +204,6 @@ export class SyncManager {
                 const syncKey = `sync_time_${this._userId}`;
                 const lastSyncTime = localStorage.getItem(syncKey) || '1970-01-01 00:00:00';
                 
-                // FIX 2: Create a 2-second overlap window to prevent SQLite precision tearing
                 let safeSyncTime = lastSyncTime;
                 if (lastSyncTime !== '1970-01-01 00:00:00') {
                     const d = new Date(lastSyncTime.replace(' ', 'T') + 'Z');
@@ -216,6 +215,10 @@ export class SyncManager {
                 for (const table of SYNC_TABLES) {
                     const changedRows = await this.query(`SELECT * FROM ${table} WHERE updatedAt > ?`, [safeSyncTime]);
                     if (changedRows.length > 0) pushPayload[table] = changedRows;
+                }
+
+                if (pushPayload.kanban_tabs) {
+                    console.warn(`[5. SyncManager] Pushing ${pushPayload.kanban_tabs.length} tabs TO the server!`, pushPayload.kanban_tabs);
                 }
 
                 const flightTime = new Date().toISOString().replace('T', ' ').slice(0, 19);
@@ -244,7 +247,6 @@ export class SyncManager {
     async syncNow() {
         if (!this._online || !this._userId) return;
         
-        // FIX 3: Debounce incoming SSE triggers to prevent DDOSing the server
         clearTimeout(this._syncNowDebounce);
         this._syncNowDebounce = setTimeout(async () => {
             try {
@@ -278,7 +280,8 @@ export class SyncManager {
     }
 
     async _mergeServerData(serverChanges) {
-        // FIX 4: Swapped INSERT OR REPLACE for ON CONFLICT DO UPDATE so the 2-second overlap window doesn't overwrite your newer local edits
+        console.log(`[4. SyncManager] Received server payload. Tabs included: ${serverChanges.kanban_tabs?.length || 0}`);
+
         if (serverChanges.categories?.length) {
             await this.runBatch(serverChanges.categories.map(c => ({
                 sql: `INSERT INTO categories (id, name, color, userID, updatedAt, isDeleted) VALUES (?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, color=excluded.color, userID=excluded.userID, updatedAt=excluded.updatedAt, isDeleted=excluded.isDeleted WHERE excluded.updatedAt > categories.updatedAt`,

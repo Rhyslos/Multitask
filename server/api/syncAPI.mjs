@@ -1,3 +1,4 @@
+// router functions
 import { Router } from 'express';
 import { catchAsync } from './apiUtils.mjs';
 import { notifyUser } from '../modules/networking.mjs';
@@ -6,8 +7,6 @@ import crypto from 'crypto';
 export default function createSyncRouter(db) {
     const router = Router();
 
-    // Pure pull — called by syncNow() on SSE-triggered updates.
-    // No writes, no broadcasts. Safe to call at any time without side-effects.
     router.get('/', catchAsync(async (req, res) => {
         const { userID, lastSync } = req.query;
         if (!userID) return res.status(400).json({ error: 'userID required' });
@@ -19,6 +18,10 @@ export default function createSyncRouter(db) {
     router.post('/', catchAsync(async (req, res) => {
         const { userID, lastSync, clientChanges } = req.body;
         if (!userID) return res.status(400).json({ error: 'userID required' });
+
+        if (clientChanges?.kanban_tabs) {
+            console.log(`[6. Server] Received tab push from user ${userID}:`, clientChanges.kanban_tabs);
+        }
 
         const hasIncomingChanges = clientChanges && Object.keys(clientChanges).length > 0;
 
@@ -49,8 +52,8 @@ export default function createSyncRouter(db) {
     return router;
 }
 
+// database functions
 async function applyClientChanges(db, changes) {
-    // 1. Categories
     if (changes.categories) {
         for (const c of changes.categories) {
             try {
@@ -62,11 +65,10 @@ async function applyClientChanges(db, changes) {
                      WHERE excluded.updatedAt > categories.updatedAt`,
                     [c.id, c.name, c.color, c.userID, c.updatedAt, c.isDeleted]
                 );
-            } catch (e) { /* Skip stale data */ }
+            } catch (e) {}
         }
     }
 
-    // 2. Workspaces
     if (changes.workspaces) {
         for (const w of changes.workspaces) {
             try {
@@ -82,11 +84,10 @@ async function applyClientChanges(db, changes) {
                     `INSERT OR IGNORE INTO workspace_members (id, workspaceID, userID, role) VALUES (?, ?, ?, ?)`,
                     [crypto.randomUUID(), w.id, w.userID, 'owner']
                 );
-            } catch (e) { /* Skip stale data */ }
+            } catch (e) {}
         }
     }
 
-    // 3. Kanban tabs
     if (changes.kanban_tabs) {
         for (const t of changes.kanban_tabs) {
             try {
@@ -98,11 +99,10 @@ async function applyClientChanges(db, changes) {
                      WHERE excluded.updatedAt > kanban_tabs.updatedAt`,
                     [t.id, t.name, t.color, t.tabOrder, t.isArchived, t.workspaceID, t.updatedAt, t.isDeleted]
                 );
-            } catch (e) { /* Skip stale data */ }
+            } catch (e) {}
         }
     }
 
-    // 4. Kanban columns — must be applied before lists since lists FK to columns
     if (changes.kanban_columns) {
         for (const c of changes.kanban_columns) {
             try {
@@ -120,7 +120,6 @@ async function applyClientChanges(db, changes) {
         }
     }
 
-    // 5. Lists — now reference columnID instead of columnIndex
     if (changes.lists) {
         for (const l of changes.lists) {
             try {
@@ -138,7 +137,6 @@ async function applyClientChanges(db, changes) {
         }
     }
 
-    // 6. Tasks
    if (changes.tasks) {
         for (const t of changes.tasks) {
             try {
@@ -158,7 +156,6 @@ async function applyClientChanges(db, changes) {
         }
     }
 
-    // 7. Notes
     if (changes.notes) {
         for (const n of changes.notes) {
             try {
@@ -170,7 +167,7 @@ async function applyClientChanges(db, changes) {
                      WHERE excluded.updatedAt > notes.updatedAt`,
                     [n.id, n.content, n.workspaceID, n.updatedAt, n.isDeleted]
                 );
-            } catch (e) { /* Skip stale data */ }
+            } catch (e) {}
         }
     }
 }
@@ -201,7 +198,6 @@ async function getServerChanges(db, userID, lastSync) {
         wsParams
     );
 
-    // Columns must be sent before lists so the client can apply them in order
     const kanban_columns = await db.all(
         `SELECT * FROM kanban_columns WHERE workspaceID IN (${wsQuery}) AND updatedAt > ?`,
         wsParams

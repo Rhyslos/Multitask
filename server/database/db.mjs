@@ -54,6 +54,8 @@ export async function initializeDatabase() {
         userID TEXT NOT NULL,
         role TEXT NOT NULL DEFAULT 'editor',
         joinedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        isDeleted INTEGER DEFAULT 0,
         FOREIGN KEY (workspaceID) REFERENCES workspaces (id) ON DELETE CASCADE,
         FOREIGN KEY (userID) REFERENCES users (id) ON DELETE CASCADE
     );

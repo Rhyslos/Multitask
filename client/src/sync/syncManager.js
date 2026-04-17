@@ -4,7 +4,7 @@ import DbWorker from './dbWorker.js?worker';
 const API = 'http://localhost:8080/api';
 
 const SCHEMA_SQL = `
-  CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, email TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, createdAt DATETIME DEFAULT CURRENT_TIMESTAMP, updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP, isDeleted INTEGER DEFAULT 0);
+  CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, email TEXT NOT NULL, firstName TEXT, lastName TEXT, updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP, isDeleted INTEGER DEFAULT 0);
   CREATE TABLE IF NOT EXISTS categories (id TEXT PRIMARY KEY, name TEXT NOT NULL, color TEXT NOT NULL, userID TEXT NOT NULL, updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP, isDeleted INTEGER DEFAULT 0);
   CREATE TABLE IF NOT EXISTS workspaces (id TEXT PRIMARY KEY, name TEXT NOT NULL, userID TEXT NOT NULL, categoryID TEXT, createdAt DATETIME DEFAULT CURRENT_TIMESTAMP, updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP, isDeleted INTEGER DEFAULT 0);
   CREATE TABLE IF NOT EXISTS workspace_members (id TEXT PRIMARY KEY, workspaceID TEXT NOT NULL, userID TEXT NOT NULL, role TEXT DEFAULT 'editor', updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP, isDeleted INTEGER DEFAULT 0);
@@ -20,7 +20,7 @@ const SCHEMA_SQL = `
   CREATE INDEX IF NOT EXISTS idx_columns_tab ON kanban_columns(workspaceID, tabID);
 `;
 
-const SYNC_TABLES = ['categories', 'workspaces', 'kanban_tabs', 'kanban_columns', 'lists', 'tasks', 'notes'];
+const SYNC_TABLES = ['users', 'categories', 'workspaces', 'workspace_members', 'kanban_tabs', 'kanban_columns', 'lists', 'tasks', 'notes'];
 
 let instancePromise = null;
 
@@ -244,6 +244,55 @@ export class SyncManager {
         }, 300);
     }
 
+    async forceSync() {
+        if (!this._online || !this._userId) return;
+        
+        // Cancel any pending debounced syncs
+        clearTimeout(this._syncDebounceTimer);
+        
+        try {
+            this._syncing = true;
+            await this._dbReadyPromise;
+
+            const syncKey = `sync_time_${this._userId}`;
+            const lastSyncTime = localStorage.getItem(syncKey) || '1970-01-01 00:00:00';
+            
+            let safeSyncTime = lastSyncTime;
+            if (lastSyncTime !== '1970-01-01 00:00:00') {
+                const d = new Date(lastSyncTime.replace(' ', 'T') + 'Z');
+                d.setSeconds(d.getSeconds() - 2);
+                safeSyncTime = d.toISOString().replace('T', ' ').slice(0, 19);
+            }
+
+            const pushPayload = {};
+            for (const table of SYNC_TABLES) {
+                const changedRows = await this.query(`SELECT * FROM ${table} WHERE updatedAt > ?`, [safeSyncTime]);
+                if (changedRows.length > 0) pushPayload[table] = changedRows;
+            }
+
+            const flightTime = new Date().toISOString().replace('T', ' ').slice(0, 19);
+
+            const r = await fetch(`${API}/sync`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userID: this._userId, lastSync: safeSyncTime, clientChanges: pushPayload }),
+                signal: AbortSignal.timeout(5000),
+            });
+
+            if (!r.ok) throw new Error(`Sync failed: ${r.status}`);
+
+            const serverChanges = await r.json();
+            await this._mergeServerData(serverChanges);
+            localStorage.setItem(syncKey, flightTime);
+            this._setOnline(true);
+        } catch (e) {
+            this._setOnline(false);
+            throw e; 
+        } finally {
+            this._syncing = false;
+        }
+    }
+
     async syncNow() {
         if (!this._online || !this._userId) return;
         
@@ -281,6 +330,20 @@ export class SyncManager {
 
     async _mergeServerData(serverChanges) {
         console.log(`[4. SyncManager] Received server payload. Tabs included: ${serverChanges.kanban_tabs?.length || 0}`);
+
+        if (serverChanges.users?.length) {
+            await this.runBatch(serverChanges.users.map(u => ({
+                sql: `INSERT INTO users (id, email, firstName, lastName, updatedAt, isDeleted) VALUES (?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET email=excluded.email, firstName=excluded.firstName, lastName=excluded.lastName, updatedAt=excluded.updatedAt, isDeleted=excluded.isDeleted WHERE excluded.updatedAt > users.updatedAt`,
+                params: [u.id, u.email, u.firstName, u.lastName, u.updatedAt, u.isDeleted],
+            })));
+        }
+
+        if (serverChanges.workspace_members?.length) {
+            await this.runBatch(serverChanges.workspace_members.map(wm => ({
+                sql: `INSERT INTO workspace_members (id, workspaceID, userID, role, updatedAt, isDeleted) VALUES (?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET workspaceID=excluded.workspaceID, userID=excluded.userID, role=excluded.role, updatedAt=excluded.updatedAt, isDeleted=excluded.isDeleted WHERE excluded.updatedAt > workspace_members.updatedAt`,
+                params: [wm.id, wm.workspaceID, wm.userID, wm.role, wm.updatedAt, wm.isDeleted],
+            })));
+        }
 
         if (serverChanges.categories?.length) {
             await this.runBatch(serverChanges.categories.map(c => ({

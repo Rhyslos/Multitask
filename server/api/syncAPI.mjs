@@ -80,9 +80,23 @@ async function applyClientChanges(db, changes) {
                      WHERE excluded.updatedAt > workspaces.updatedAt`,
                     [w.id, w.name, w.userID, w.categoryID, w.createdAt, w.updatedAt, w.isDeleted]
                 );
+            } catch (e) {
+                // Now you will actually see WHY a workspace failed to save!
+                console.error(`[SYNC ERROR] Failed to insert workspace ${w.id}:`, e.message);
+            }
+        }
+    }
+
+    if (changes.workspace_members) {
+        for (const wm of changes.workspace_members) {
+            try {
                 await db.run(
-                    `INSERT OR IGNORE INTO workspace_members (id, workspaceID, userID, role) VALUES (?, ?, ?, ?)`,
-                    [crypto.randomUUID(), w.id, w.userID, 'owner']
+                    `INSERT INTO workspace_members (id, workspaceID, userID, role, updatedAt, isDeleted) 
+                     VALUES (?, ?, ?, ?, ?, ?) 
+                     ON CONFLICT(id) DO UPDATE SET 
+                     workspaceID=excluded.workspaceID, userID=excluded.userID, role=excluded.role, updatedAt=excluded.updatedAt, isDeleted=excluded.isDeleted 
+                     WHERE excluded.updatedAt > workspace_members.updatedAt`,
+                    [wm.id, wm.workspaceID, wm.userID, wm.role, wm.updatedAt, wm.isDeleted]
                 );
             } catch (e) {}
         }
@@ -186,6 +200,7 @@ async function getServerChanges(db, userID, lastSync) {
         [userID, since]
     );
 
+    // wsQuery is defined here, so any queries using it MUST come below this line
     const wsQuery = `
         SELECT id FROM workspaces WHERE userID = ? 
         UNION 
@@ -219,5 +234,25 @@ async function getServerChanges(db, userID, lastSync) {
         wsParams
     );
 
-    return { workspaces, categories, kanban_tabs, kanban_columns, lists, tasks, notes };
+    // --- NEW: Pulling workspace members and safe user data ---
+    const workspace_members = await db.all(
+        `SELECT * FROM workspace_members WHERE workspaceID IN (${wsQuery}) AND updatedAt > ?`,
+        wsParams
+    );
+
+    const usersQuery = `SELECT userID FROM workspace_members WHERE workspaceID IN (${wsQuery})`;
+
+    const users = await db.all(`
+        SELECT DISTINCT u.id, u.email, u.firstName, u.lastName, u.updatedAt, u.isDeleted 
+        FROM users u
+        JOIN workspace_members wm ON u.id = wm.userID
+        WHERE wm.workspaceID IN (
+            SELECT id FROM workspaces WHERE userID = ? 
+            UNION 
+            SELECT workspaceID FROM workspace_members WHERE userID = ?
+        ) 
+        AND (u.updatedAt > ? OR wm.updatedAt > ?)
+    `, [userID, userID, since, since]);
+
+    return { users, workspace_members, workspaces, categories, kanban_tabs, kanban_columns, lists, tasks, notes };
 }

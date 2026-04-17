@@ -72,15 +72,33 @@ export function useWorkspaces(userID) {
         return () => window.removeEventListener('workspacesUpdated', handleUpdate);
     }, [sm, loadLocal]);
 
-    async function createWorkspace(name, categoryID) {
+   async function createWorkspace(name, categoryID) {
         const id = crypto.randomUUID();
-        const createdAt = new Date().toISOString();
+        
+        // Generate the exact datetime string SQLite expects (YYYY-MM-DD HH:MM:SS)
+        const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
+        
+        // 1. Insert Workspace locally WITH the explicit timestamp
         await sm.execute(
-            `INSERT INTO workspaces (id, name, userID, categoryID, createdAt) VALUES (?,?,?,?,?)`,
-            [id, name, userID, categoryID || null, createdAt]
+            `INSERT INTO workspaces (id, name, userID, categoryID, createdAt, updatedAt) VALUES (?,?,?,?,?,?)`,
+            [id, name, userID, categoryID || null, now, now]
         );
+
+        // 2. Insert creator into workspace_members locally WITH explicit timestamp
+        await sm.execute(
+            `INSERT INTO workspace_members (id, workspaceID, userID, role, updatedAt) VALUES (?, ?, ?, ?, ?)`,
+            [crypto.randomUUID(), id, userID, 'owner', now]
+        );
+
+        // 3. Force an immediate, blocking sync to the server
+        try {
+            await sm.forceSync();
+        } catch (e) {
+            console.warn("Could not force sync workspace to server yet:", e);
+        }
+
         const cat = categories.find(c => c.id === categoryID);
-        return { id, name, userID, categoryID, createdAt, categoryName: cat?.name, categoryColor: cat?.color };
+        return { id, name, userID, categoryID, createdAt: now, categoryName: cat?.name, categoryColor: cat?.color };
     }
 
     async function deleteWorkspace(id) {

@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-// hook imports
 import { useWorkspacePresence } from '../hooks/useWorkspacePresence'; 
 import HamburgerMenu from './HamburgerMenu';
+// Import the new modal
+import UserProfileModal from './UserProfileModal'; 
 import { appName } from '../App';
 
 // helper functions
@@ -26,20 +27,19 @@ function getAvatarColor(member) {
     return '#' + '00000'.substring(0, 6 - c.length) + c;
 }
 
-// component functions
 export default function Navbar() {
     const { user } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
     const { workspaceID } = useParams();
+    
     const [menuOpen, setMenuOpen] = useState(false);
+    // New state to track the clicked member
+    const [selectedMember, setSelectedMember] = useState(null); 
 
     const inWorkspace = !!workspaceID;
-    
-    // data fetching functions
     const { members } = useWorkspacePresence(workspaceID);
 
-    // navigation functions
     function navTo(page) {
         if (workspaceID) navigate(`/workspace/${workspaceID}/${page}`);
     }
@@ -51,7 +51,6 @@ export default function Navbar() {
     return (
         <>
             <nav className="navbar">
-
                 <div className="navbar-brand" onClick={() => navigate('/dashboard')} style={{ cursor: 'pointer' }}>
                     <span className="navbar-logo">✦</span>
                     <span className="navbar-name">{appName}</span>
@@ -66,14 +65,12 @@ export default function Navbar() {
                             >
                                 Graph Editor
                             </button>
-
                             <button
                                 className={`navbar-page-btn ${isActive('kanban') ? 'active' : ''}`}
                                 onClick={() => navTo('kanban')}
                             >
                                 Kanban
                             </button>
-                            
                             <button
                                 className={`navbar-page-btn ${isActive('notation') ? 'active' : ''}`}
                                 onClick={() => navTo('notation')}
@@ -87,8 +84,12 @@ export default function Navbar() {
                                 <div 
                                     key={member.id} 
                                     className={`navbar-avatar ${member.isOnline ? 'online' : 'offline'}`}
-                                    style={{ backgroundColor: getAvatarColor(member) }}
+                                    style={{ 
+                                        backgroundColor: getAvatarColor(member),
+                                        cursor: 'pointer' // Added pointer to indicate it's clickable
+                                    }}
                                     title={member.displayName || member.firstName || member.email}
+                                    onClick={() => setSelectedMember(member)} // Open modal on click
                                 >
                                     {getAvatarLetter(member)}
                                 </div>
@@ -104,7 +105,10 @@ export default function Navbar() {
                     </button>
                 </div>
             </nav>
+            
+            {/* Modals */}
             <HamburgerMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
+            <UserProfileModal member={selectedMember} onClose={() => setSelectedMember(null)} />
         </>
     );
 }

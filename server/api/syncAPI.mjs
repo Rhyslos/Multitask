@@ -243,14 +243,10 @@ async function getServerChanges(db, userID, lastSync) {
     const usersQuery = `SELECT userID FROM workspace_members WHERE workspaceID IN (${wsQuery})`;
 
     const users = await db.all(`
-        SELECT DISTINCT u.id, u.email, u.firstName, u.lastName, u.countryIso, u.phoneNumber, u.gender, u.skillset, u.updatedAt, u.isDeleted 
+        SELECT DISTINCT u.id, u.email, u.firstName, u.lastName, u.countryIso, u.phoneNumber, u.gender, u.skillset, u.privacySettings, u.updatedAt, u.isDeleted 
         FROM users u
         JOIN workspace_members wm ON u.id = wm.userID
-        WHERE wm.workspaceID IN (
-            SELECT id FROM workspaces WHERE userID = ? 
-            UNION 
-            SELECT workspaceID FROM workspace_members WHERE userID = ?
-        ) 
+        WHERE wm.workspaceID IN (${wsQuery}) 
         AND (u.updatedAt > ? OR wm.updatedAt > ?)
     `, [userID, userID, since, since]);
 

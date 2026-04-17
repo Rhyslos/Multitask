@@ -22,6 +22,7 @@ export async function initializeDatabase() {
         jobTitle TEXT,
         gender TEXT,
         skillset TEXT,
+        privacySettings TEXT DEFAULT '{}',
         createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
         updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
         isDeleted INTEGER DEFAULT 0

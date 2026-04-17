@@ -4,7 +4,7 @@ import DbWorker from './dbWorker.js?worker';
 const API = 'http://localhost:8080/api';
 
 const SCHEMA_SQL = `
-  CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, email TEXT NOT NULL, firstName TEXT, lastName TEXT, countryIso TEXT, phoneNumber TEXT, gender TEXT, skillset TEXT, updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP, isDeleted INTEGER DEFAULT 0);
+  CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, email TEXT NOT NULL, firstName TEXT, lastName TEXT, countryIso TEXT, phoneNumber TEXT, gender TEXT, skillset TEXT, privacySettings TEXT, updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP, isDeleted INTEGER DEFAULT 0);
   CREATE TABLE IF NOT EXISTS categories (id TEXT PRIMARY KEY, name TEXT NOT NULL, color TEXT NOT NULL, userID TEXT NOT NULL, updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP, isDeleted INTEGER DEFAULT 0);
   CREATE TABLE IF NOT EXISTS workspaces (id TEXT PRIMARY KEY, name TEXT NOT NULL, userID TEXT NOT NULL, categoryID TEXT, createdAt DATETIME DEFAULT CURRENT_TIMESTAMP, updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP, isDeleted INTEGER DEFAULT 0);
   CREATE TABLE IF NOT EXISTS workspace_members (id TEXT PRIMARY KEY, workspaceID TEXT NOT NULL, userID TEXT NOT NULL, role TEXT DEFAULT 'editor', updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP, isDeleted INTEGER DEFAULT 0);
@@ -333,8 +333,8 @@ export class SyncManager {
 
         if (serverChanges.users?.length) {
             await this.runBatch(serverChanges.users.map(u => ({
-                sql: `INSERT INTO users (id, email, firstName, lastName, countryIso, phoneNumber, gender, skillset, updatedAt, isDeleted) VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET email=excluded.email, firstName=excluded.firstName, lastName=excluded.lastName, countryIso=excluded.countryIso, phoneNumber=excluded.phoneNumber, gender=excluded.gender, skillset=excluded.skillset, updatedAt=excluded.updatedAt, isDeleted=excluded.isDeleted WHERE excluded.updatedAt > users.updatedAt`,
-                params: [u.id, u.email, u.firstName, u.lastName, u.countryIso, u.phoneNumber, u.gender, u.skillset, u.updatedAt, u.isDeleted],
+                sql: `INSERT INTO users (id, email, firstName, lastName, countryIso, phoneNumber, gender, skillset, privacySettings, updatedAt, isDeleted) VALUES (?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET email=excluded.email, firstName=excluded.firstName, lastName=excluded.lastName, countryIso=excluded.countryIso, phoneNumber=excluded.phoneNumber, gender=excluded.gender, skillset=excluded.skillset, privacySettings=excluded.privacySettings, updatedAt=excluded.updatedAt, isDeleted=excluded.isDeleted WHERE excluded.updatedAt > users.updatedAt`,
+                params: [u.id, u.email, u.firstName, u.lastName, u.countryIso, u.phoneNumber, u.gender, u.skillset, u.privacySettings, u.updatedAt, u.isDeleted],
             })));
         }
 

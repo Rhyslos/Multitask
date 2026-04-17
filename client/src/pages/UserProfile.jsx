@@ -78,7 +78,29 @@ function InternalCountrySelect({ value, onChange }) {
     );
 }
 
-// user functions
+// component functions
+function PrivacySelector({ value, onChange }) {
+    return (
+        <select
+            value={value || 'public'}
+            onChange={e => onChange(e.target.value)}
+            style={{ 
+                marginLeft: 'auto', 
+                fontSize: '0.75rem', 
+                padding: '2px 4px', 
+                borderRadius: '4px', 
+                background: 'transparent', 
+                color: 'var(--muted)', 
+                border: '1px solid var(--border)' 
+            }}
+        >
+            <option value="public">Public</option>
+            <option value="associates">Associates Only</option>
+            <option value="private">Private</option>
+        </select>
+    );
+}
+
 // user functions
 export default function UserProfile() {
     const { user, updateUser } = useAuth();
@@ -96,6 +118,14 @@ export default function UserProfile() {
             return user?.skillset ? JSON.parse(user.skillset) : [''];
         } catch {
             return [''];
+        }
+    });
+
+    const [privacySettings, setPrivacySettings] = useState(() => {
+        try {
+            return user?.privacySettings ? JSON.parse(user.privacySettings) : {};
+        } catch {
+            return {};
         }
     });
 
@@ -124,6 +154,11 @@ export default function UserProfile() {
                 setSkillset(user.skillset ? JSON.parse(user.skillset) : ['']);
             } catch {
                 setSkillset(['']);
+            }
+            try {
+                setPrivacySettings(user.privacySettings ? JSON.parse(user.privacySettings) : {});
+            } catch {
+                setPrivacySettings({});
             }
         }
     }, [user]);
@@ -158,6 +193,10 @@ export default function UserProfile() {
         setSkillset(newSkills.length ? newSkills : ['']);
     }
 
+    function handlePrivacyChange(field, value) {
+        setPrivacySettings(prev => ({ ...prev, [field]: value }));
+    }
+
     // api submission functions
     async function handleProfileUpdate(e) {
         e.preventDefault();
@@ -176,7 +215,8 @@ export default function UserProfile() {
                     countryIso,
                     phoneNumber,
                     skillset: filteredSkills,
-                    gender
+                    gender,
+                    privacySettings: JSON.stringify(privacySettings)
                 }),
             });
             const data = await res.json();
@@ -292,7 +332,10 @@ export default function UserProfile() {
 
                             <div className="profile-row">
                                 <div className="profile-field profile-phone-field">
-                                    <label>Phone Number</label>
+                                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                                        <label>Phone Number</label>
+                                        <PrivacySelector value={privacySettings.phoneNumber} onChange={v => handlePrivacyChange('phoneNumber', v)} />
+                                    </div>
                                     <div className="profile-phone-group">
                                         <InternalCountrySelect value={countryIso} onChange={handleCountryChange} />
                                         <input
@@ -308,7 +351,10 @@ export default function UserProfile() {
                                     </div>
                                 </div>
                                 <div className="profile-field">
-                                    <label htmlFor="gender">Gender (Optional)</label>
+                                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                                        <label htmlFor="gender">Gender (Optional)</label>
+                                        <PrivacySelector value={privacySettings.gender} onChange={v => handlePrivacyChange('gender', v)} />
+                                    </div>
                                     <select
                                         id="gender"
                                         value={gender}
@@ -324,7 +370,10 @@ export default function UserProfile() {
                             </div>
 
                             <div className="profile-field">
-                                <label>Skillset</label>
+                                <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
+                                    <label style={{ margin: 0 }}>Skillset</label>
+                                    <PrivacySelector value={privacySettings.skillset} onChange={v => handlePrivacyChange('skillset', v)} />
+                                </div>
                                 {skillset.map((skill, index) => (
                                     <div key={index} style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
                                         <input
@@ -351,6 +400,14 @@ export default function UserProfile() {
                                 >
                                     + Add Skill
                                 </button>
+                            </div>
+
+                            <div className="profile-field">
+                                <div style={{ display: 'flex', alignItems: 'center' }}>
+                                    <label>Location (Country)</label>
+                                    <PrivacySelector value={privacySettings.countryIso} onChange={v => handlePrivacyChange('countryIso', v)} />
+                                </div>
+                                <span style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>Your flag is determined by your phone number selection.</span>
                             </div>
 
                             {profileMessage.text && (

@@ -16,7 +16,7 @@ export function useWorkspacePresence(workspaceID) {
         
         try {
             const results = await sm.query(`
-                SELECT u.id, u.email, u.firstName, u.lastName, u.countryIso, u.phoneNumber, u.gender, u.skillset, wm.role 
+                SELECT u.id, u.email, u.firstName, u.lastName, u.countryIso, u.phoneNumber, u.gender, u.skillset, u.privacySettings, wm.role 
                 FROM workspace_members wm
                 JOIN users u ON wm.userID = u.id
                 WHERE wm.workspaceID = ? AND wm.isDeleted = 0

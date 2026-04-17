@@ -1,4 +1,5 @@
 import React from 'react';
+import { useAuth } from '../hooks/useAuth';
 import { COUNTRIES } from '../components/international/constants'; 
 import 'flag-icons/css/flag-icons.min.css';
 
@@ -21,16 +22,61 @@ function getAvatarColor(member) {
     return '#' + '00000'.substring(0, 6 - c.length) + c;
 }
 
+function canViewField(privacySetting, isSelf, isAssociate) {
+    if (isSelf) return true;
+    if (privacySetting === 'private') return false;
+    if (privacySetting === 'associates') return isAssociate;
+    return true; 
+}
+
+function PrivacyBadge({ setting, isSelf }) {
+    if (!isSelf) return null;
+    if (setting === 'public' || !setting) return null;
+
+    return (
+        <span style={{
+            marginLeft: '8px',
+            fontSize: '0.65rem',
+            padding: '2px 6px',
+            borderRadius: '10px',
+            background: setting === 'private' ? 'rgba(235, 87, 87, 0.1)' : 'rgba(242, 201, 76, 0.1)',
+            color: setting === 'private' ? '#eb5757' : '#f2c94c',
+            border: `1px solid ${setting === 'private' ? 'rgba(235, 87, 87, 0.3)' : 'rgba(242, 201, 76, 0.3)'}`,
+            fontWeight: 'bold',
+            textTransform: 'uppercase'
+        }}>
+            {setting}
+        </span>
+    );
+}
+
 // component functions
 export default function UserProfileModal({ member, onClose }) {
+    const { user } = useAuth();
+
     if (!member) return null;
 
     // parsing data
+    const isSelf = user?.id === member.id;
+    const isAssociate = true; // Assuming being in the same workspace makes them an associate
+    
+    let privacy = {};
+    try {
+        privacy = member.privacySettings ? JSON.parse(member.privacySettings) : {};
+    } catch {
+        privacy = {};
+    }
+
+    const showCountry = canViewField(privacy.countryIso, isSelf, isAssociate);
+    const showPhone = canViewField(privacy.phoneNumber, isSelf, isAssociate);
+    const showGender = canViewField(privacy.gender, isSelf, isAssociate);
+    const showSkillset = canViewField(privacy.skillset, isSelf, isAssociate);
+
     const country = member.countryIso ? COUNTRIES.find(c => c.iso === member.countryIso.toLowerCase()) : null;
     let skills = [];
     try {
         skills = member.skillset ? JSON.parse(member.skillset) : [];
-        skills = skills.filter(s => s.trim() !== ''); // Remove empty skill inputs
+        skills = skills.filter(s => s.trim() !== '');
     } catch {
         skills = [];
     }
@@ -43,7 +89,6 @@ export default function UserProfileModal({ member, onClose }) {
                     <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer', color: 'inherit' }}>✕</button>
                 </div>
                 
-                {/* Header Section */}
                 <div style={{ textAlign: 'center', marginBottom: '24px' }}>
                     <div 
                         style={{
@@ -90,12 +135,13 @@ export default function UserProfileModal({ member, onClose }) {
 
                 <hr style={{ border: 'none', borderTop: '1px solid var(--border-color, #333)', margin: '0 0 24px 0' }} />
 
-                {/* Details Section */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                     
-                    {country && (
+                    {country && showCountry && (
                         <div>
-                            <span style={{ display: 'block', fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--muted, #888)', letterSpacing: '0.05em', marginBottom: '4px' }}>Location</span>
+                            <span style={{ display: 'flex', alignItems: 'center', fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--muted, #888)', letterSpacing: '0.05em', marginBottom: '4px' }}>
+                                Location <PrivacyBadge setting={privacy.countryIso} isSelf={isSelf} />
+                            </span>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.95rem' }}>
                                 <span className={`fi fi-${country.iso}`} style={{ borderRadius: '2px' }}></span>
                                 {country.name}
@@ -103,27 +149,33 @@ export default function UserProfileModal({ member, onClose }) {
                         </div>
                     )}
 
-                    {member.phoneNumber && (
+                    {member.phoneNumber && showPhone && (
                         <div>
-                            <span style={{ display: 'block', fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--muted, #888)', letterSpacing: '0.05em', marginBottom: '4px' }}>Phone</span>
+                            <span style={{ display: 'flex', alignItems: 'center', fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--muted, #888)', letterSpacing: '0.05em', marginBottom: '4px' }}>
+                                Phone <PrivacyBadge setting={privacy.phoneNumber} isSelf={isSelf} />
+                            </span>
                             <div style={{ fontSize: '0.95rem' }}>
                                 {member.phoneNumber}
                             </div>
                         </div>
                     )}
 
-                    {member.gender && (
+                    {member.gender && showGender && (
                         <div>
-                            <span style={{ display: 'block', fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--muted, #888)', letterSpacing: '0.05em', marginBottom: '4px' }}>Gender</span>
+                            <span style={{ display: 'flex', alignItems: 'center', fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--muted, #888)', letterSpacing: '0.05em', marginBottom: '4px' }}>
+                                Gender <PrivacyBadge setting={privacy.gender} isSelf={isSelf} />
+                            </span>
                             <div style={{ fontSize: '0.95rem', textTransform: 'capitalize' }}>
                                 {member.gender}
                             </div>
                         </div>
                     )}
 
-                    {skills.length > 0 && (
+                    {skills.length > 0 && showSkillset && (
                         <div>
-                            <span style={{ display: 'block', fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--muted, #888)', letterSpacing: '0.05em', marginBottom: '8px' }}>Skillset</span>
+                            <span style={{ display: 'flex', alignItems: 'center', fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--muted, #888)', letterSpacing: '0.05em', marginBottom: '8px' }}>
+                                Skillset <PrivacyBadge setting={privacy.skillset} isSelf={isSelf} />
+                            </span>
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                                 {skills.map((skill, index) => (
                                     <span key={index} style={{
@@ -138,6 +190,13 @@ export default function UserProfileModal({ member, onClose }) {
                                     </span>
                                 ))}
                             </div>
+                        </div>
+                    )}
+
+                    {/* Show a placeholder if everything is hidden */}
+                    {(!showCountry && !showPhone && !showGender && !showSkillset) && !isSelf && (
+                        <div style={{ textAlign: 'center', color: 'var(--muted)', fontSize: '0.85rem', fontStyle: 'italic', padding: '16px 0' }}>
+                            This user's details are private.
                         </div>
                     )}
                 </div>

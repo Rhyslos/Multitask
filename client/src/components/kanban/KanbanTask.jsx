@@ -64,6 +64,7 @@ export default function KanbanTask({
         }
     }
 
+    // TODO: Bytte onMouseDown med onDrag?
     return (
         <div
             ref={taskRef}
@@ -99,6 +100,8 @@ export default function KanbanTask({
                         {task.title}
                     </span>
 
+
+                    
                     <div 
                         className="kanban-task-drag-handle"
                         onMouseDown={e => onStartDrag(e, task, taskRef.current)}

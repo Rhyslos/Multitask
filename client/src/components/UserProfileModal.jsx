@@ -67,10 +67,17 @@ export default function UserProfileModal({ member, onClose }) {
         privacy = {};
     }
 
+    const showRealName = canViewField(privacy.realName, isSelf, isAssociate);
     const showCountry = canViewField(privacy.countryIso, isSelf, isAssociate);
     const showPhone = canViewField(privacy.phoneNumber, isSelf, isAssociate);
     const showGender = canViewField(privacy.gender, isSelf, isAssociate);
     const showSkillset = canViewField(privacy.skillset, isSelf, isAssociate);
+
+    const hasRealName = !!(member.firstName || member.lastName);
+    const realNameString = `${member.firstName || ''} ${member.lastName || ''}`.trim();
+    
+    // Priority: Display Name -> Allowed Real Name -> Email Prefix
+    const primaryTitle = member.displayName || (showRealName && hasRealName ? realNameString : member.email.split('@')[0]);
 
     const country = member.countryIso ? COUNTRIES.find(c => c.iso === member.countryIso.toLowerCase()) : null;
     let skills = [];
@@ -106,9 +113,25 @@ export default function UserProfileModal({ member, onClose }) {
                         {getAvatarLetter(member)}
                     </div>
 
+                    {/* Main Title (Display Name or Fallback) */}
                     <h2 style={{ margin: '0 0 4px 0', fontSize: '1.4rem' }}>
-                        {member.displayName || member.firstName ? `${member.firstName || ''} ${member.lastName || ''}`.trim() : 'Unknown User'}
+                        {primaryTitle}
                     </h2>
+                    
+                    {/* Conditionally render real name as a subtitle if they have a display name taking the top spot */}
+                    {member.displayName && hasRealName && showRealName && (
+                        <p style={{ margin: '0 0 4px 0', color: 'var(--ink)', fontSize: '0.95rem', fontWeight: 500, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                            {realNameString} <PrivacyBadge setting={privacy.realName} isSelf={isSelf} />
+                        </p>
+                    )}
+
+                    {/* If they don't have a display name, the real name is the main title, so we show the privacy badge right below it */}
+                    {!member.displayName && hasRealName && showRealName && isSelf && privacy.realName && privacy.realName !== 'public' && (
+                         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '4px' }}>
+                             <PrivacyBadge setting={privacy.realName} isSelf={isSelf} />
+                         </div>
+                    )}
+
                     <p style={{ margin: '0 0 16px 0', color: 'var(--muted, #888)', fontSize: '0.95rem' }}>
                         {member.email}
                     </p>

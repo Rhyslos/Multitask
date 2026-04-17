@@ -1,6 +1,7 @@
 import sqlite3 from 'sqlite3';
 import { open } from 'sqlite';
 
+// database initialization functions
 export async function initializeDatabase() {
     const db = await open({
         filename: './database/superSecretHighSecurityDataBase.db',
@@ -14,6 +15,7 @@ export async function initializeDatabase() {
         id TEXT PRIMARY KEY,
         email TEXT UNIQUE NOT NULL,
         password_hash TEXT NOT NULL,
+        displayName TEXT,
         firstName TEXT,
         lastName TEXT,
         countryIso TEXT,

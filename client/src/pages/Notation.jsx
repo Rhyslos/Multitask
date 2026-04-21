@@ -1,4 +1,3 @@
-// imports
 import { useEffect, useState, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { useEditor, EditorContent } from '@tiptap/react';
@@ -11,31 +10,33 @@ import { useAuth } from '../hooks/useAuth';
 import { editorExtensions } from '../components/notation/EditorExtensions';
 import Navbar from '../components/Navbar';
 import NotationSubbar from '../components/subbar/NotationSubbar';
+import NotationSidebar from '../components/notation/NotationSidebar';
 
-// page component
 export default function Notation() {
-    // hooks
     const { workspaceID } = useParams();
     const { user } = useAuth();
-    
-    // state variables
-    const [status, setStatus] = useState('connecting…');
 
-    // provider setup
+    const [activePageID, setActivePageID] = useState(null);
+    const [status, setStatus] = useState('connecting…');
+    const [sidebarOpen, setSidebarOpen] = useState(true);
+
     const { ydoc, provider } = useMemo(() => {
+        if (!activePageID) return { ydoc: null, provider: null };
+
         const doc = new Y.Doc();
         const wsProvider = new WebsocketProvider(
             'ws://localhost:8080',
-            workspaceID,
+            activePageID,
             doc
         );
         return { ydoc: doc, provider: wsProvider };
-    }, [workspaceID]);
+    }, [activePageID]);
 
-    // lifecycle hooks
     useEffect(() => {
+        if (!provider) return;
+
         provider.on('status', event => {
-            setStatus(event.status); 
+            setStatus(event.status);
         });
 
         return () => {
@@ -44,31 +45,50 @@ export default function Notation() {
         };
     }, [provider, ydoc]);
 
-    // editor initialization
     const editor = useEditor({
         extensions: [
             ...editorExtensions,
-            Collaboration.configure({
-                document: ydoc,
-            }),
-            CollaborationCaret.configure({
-                provider: provider,
-                user: {
-                    name: user?.email || 'Anonymous',
-                    color: '#c8502a'
-                }
-            })
+            ...(ydoc && provider ? [
+                Collaboration.configure({ document: ydoc }),
+                CollaborationCaret.configure({
+                    provider,
+                    user: {
+                        name: user?.email || 'Anonymous',
+                        color: '#c8502a'
+                    }
+                })
+            ] : [])
         ],
-    });
+    }, [activePageID]);
 
-    // ui rendering
     return (
         <div className="notation-root">
             <Navbar />
             <NotationSubbar editor={editor} saved={status === 'connected'} />
 
             <div className="notation-body">
-                <EditorContent editor={editor} className="notation-editor" />
+                <button
+                    className={`notation-sidebar-toggle ${sidebarOpen ? 'open' : ''}`}
+                    onClick={() => setSidebarOpen(prev => !prev)}
+                >
+                    ‹
+                </button>
+
+                {sidebarOpen && (
+                    <NotationSidebar
+                        workspaceID={workspaceID}
+                        activePageID={activePageID}
+                        onPageSelect={setActivePageID}
+                    />
+                )}
+
+                <div className="notation-editor-area">
+                    {!activePageID ? (
+                        <p className="notation-loading">Select a page to get started</p>
+                    ) : (
+                        <EditorContent editor={editor} className="notation-editor" />
+                    )}
+                </div>
             </div>
         </div>
     );

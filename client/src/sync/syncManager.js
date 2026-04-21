@@ -13,6 +13,8 @@ const SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS lists (id TEXT PRIMARY KEY, name TEXT NOT NULL, category TEXT, color TEXT, direction TEXT, columnID TEXT NOT NULL, workspaceID TEXT NOT NULL, tabID TEXT, updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP, isDeleted INTEGER DEFAULT 0);
   CREATE TABLE IF NOT EXISTS tasks (id TEXT PRIMARY KEY, title TEXT NOT NULL, description TEXT, isCompleted BOOLEAN, originalCategory TEXT, color TEXT, listID TEXT NOT NULL, taskOrder INTEGER NOT NULL DEFAULT 0, deadline TEXT, subtasks TEXT, updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP, isDeleted INTEGER DEFAULT 0);
   CREATE TABLE IF NOT EXISTS notes (id TEXT PRIMARY KEY, content TEXT NOT NULL DEFAULT '{}', workspaceID TEXT UNIQUE NOT NULL, updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP, isDeleted INTEGER DEFAULT 0);
+  CREATE TABLE IF NOT EXISTS notation_groups (id TEXT PRIMARY KEY, name TEXT NOT NULL, color TEXT, workspaceID TEXT NOT NULL, groupOrder INTEGER NOT NULL DEFAULT 0, updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP, isDeleted INTEGER DEFAULT 0);
+  CREATE TABLE IF NOT EXISTS notation_pages (id TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT 'Untitled', workspaceID TEXT NOT NULL, groupID, TEXT, pageOrder INTEGER NOT NULL DEFAULT 0, updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP, isDeleted INTEGER DEFAULT 0);
   CREATE INDEX IF NOT EXISTS idx_workspace_members_user_ws ON workspace_members(userID, workspaceID);
   CREATE INDEX IF NOT EXISTS idx_workspace_members_ws ON workspace_members(workspaceID);
   CREATE INDEX IF NOT EXISTS idx_tasks_list_order ON tasks(listID, taskOrder);
@@ -20,7 +22,7 @@ const SCHEMA_SQL = `
   CREATE INDEX IF NOT EXISTS idx_columns_tab ON kanban_columns(workspaceID, tabID);
 `;
 
-const SYNC_TABLES = ['users', 'categories', 'workspaces', 'workspace_members', 'kanban_tabs', 'kanban_columns', 'lists', 'tasks', 'notes'];
+const SYNC_TABLES = ['users', 'categories', 'workspaces', 'workspace_members', 'kanban_tabs', 'kanban_columns', 'lists', 'tasks', 'notes', 'notation_groups', 'notation_pages'];
 
 let instancePromise = null;
 
@@ -390,6 +392,20 @@ export class SyncManager {
             await this.runBatch(serverChanges.notes.map(n => ({
                 sql: `INSERT INTO notes (id, content, workspaceID, updatedAt, isDeleted) VALUES (?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET content=excluded.content, workspaceID=excluded.workspaceID, updatedAt=excluded.updatedAt, isDeleted=excluded.isDeleted WHERE excluded.updatedAt > notes.updatedAt`,
                 params: [n.id, n.content, n.workspaceID, n.updatedAt, n.isDeleted],
+            })));
+        }
+
+        if (serverChanges.notation_groups?.length) {
+            await this.runBatch(serverChanges.notation_groups.map(g => ({
+                sql: `INSERT INTO notation_groups (id, name, workspaceID, groupOrder, updatedAt, isDeleted) VALUES (?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, workspaceID=excluded.workspaceID, groupOrder=excluded.groupOrder, updatedAt=excluded.updatedAt, isDeleted=excluded.isDeleted WHERE excluded.updatedAt > notation_groups.updatedAt`,
+                params: [g.id, g.name, g.workspaceID, g.groupOrder, g.updatedAt, g.isDeleted],
+            })));
+        }
+
+        if (serverChanges.notation_pages?.length) {
+            await this.runBatch(serverChanges.notation_pages.map(p => ({
+                sql: `INSERT INTO notation_pages (id, title, workspaceID, groupID, pageOrder, updatedAt, isDeleted) VALUES (?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET title=excluded.title, workspaceID=excluded.workspaceID, groupID=excluded.groupID, pageOrder=excluded.pageOrder, updatedAt=excluded.updatedAt, isDeleted=excluded.isDeleted WHERE excluded.updatedAt > notation_pages.updatedAt`,
+                params: [p.id, p.title, p.workspaceID, p.groupID, p.pageOrder, p.updatedAt, p.isDeleted],
             })));
         }
     }

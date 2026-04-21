@@ -140,12 +140,36 @@ export async function initializeDatabase() {
         FOREIGN KEY (workspaceID) REFERENCES workspaces (id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS notation_groups (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        workspaceID TEXT NOT NULL,
+        groupOrder INTEGER NOT NULL DEFAULT 0,
+        updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        isDeleted INTEGER DEFAULT 0,
+        FOREIGN KEY (workspaceID) REFERENCES workspaces (id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS notation_pages (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL DEFAULT 'Untitled',
+        workspaceID TEXT NOT NULL,
+        groupID TEXT,
+        pageOrder INTEGER NOT NULL DEFAULT 0,
+        updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        isDeleted INTEGER DEFAULT 0,
+        FOREIGN KEY (workspaceID) REFERENCES workspaces (id) ON DELETE CASCADE,
+        FOREIGN KEY (groupID) REFERENCES notation_groups (id) ON DELETE SET NULL
+    );
+
     CREATE INDEX IF NOT EXISTS idx_workspace_members_user_ws ON workspace_members(userID, workspaceID);
     CREATE INDEX IF NOT EXISTS idx_workspace_members_ws ON workspace_members(workspaceID);
     CREATE INDEX IF NOT EXISTS idx_tasks_list_order ON tasks(listID, taskOrder);
     CREATE INDEX IF NOT EXISTS idx_lists_column ON lists(columnID);
     CREATE INDEX IF NOT EXISTS idx_columns_tab ON kanban_columns(workspaceID, tabID);
-`);
+    CREATE INDEX IF NOT EXISTS idx_notation_pages_workspace ON notation_pages(workspaceID);
+    CREATE INDEX IF NOT EXISTS idx_notation_pages_group ON notation_pages(groupID);
+    `);
 
     return db;
 }

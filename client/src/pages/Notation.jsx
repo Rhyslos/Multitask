@@ -18,6 +18,7 @@ export default function Notation() {
 
     const [activePageID, setActivePageID] = useState(null);
     const [status, setStatus] = useState('connecting…');
+    const [sidebarOpen, setSidebarOpen] = useState(true);
 
     const { ydoc, provider } = useMemo(() => {
         if (!activePageID) return { ydoc: null, provider: null };
@@ -66,11 +67,20 @@ export default function Notation() {
             <NotationSubbar editor={editor} saved={status === 'connected'} />
 
             <div className="notation-body">
-                <NotationSidebar
-                    workspaceID={workspaceID}
-                    activePageID={activePageID}
-                    onPageSelect={setActivePageID}
-                />
+                <button
+                    className={`notation-sidebar-toggle ${sidebarOpen ? 'open' : ''}`}
+                    onClick={() => setSidebarOpen(prev => !prev)}
+                >
+                    ‹
+                </button>
+
+                {sidebarOpen && (
+                    <NotationSidebar
+                        workspaceID={workspaceID}
+                        activePageID={activePageID}
+                        onPageSelect={setActivePageID}
+                    />
+                )}
 
                 <div className="notation-editor-area">
                     {!activePageID ? (

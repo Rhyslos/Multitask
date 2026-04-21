@@ -16,6 +16,7 @@ export default function NotationSidebar({ workspaceID, activePageID, onPageSelec
     const colorBtnRefs = useRef({});
     const [editingPageID, setEditingPageID] = useState(null);
     const pageTitleRefs = useRef({});
+    const [sidebarOpen, setSidebarOpen] = useState(true);
 
     const uncategorized = pages.filter(p => p.groupID === null);
 

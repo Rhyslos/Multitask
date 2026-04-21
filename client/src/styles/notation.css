@@ -1,4 +1,12 @@
-/* root styles */
+/* ============================================================
+   NOTATION PAGE — MASTER STYLESHEET
+   ============================================================ */
+
+
+/* ============================================================
+   LAYOUT — Root, Body, Editor Area
+   ============================================================ */
+
 .notation-root {
     display: flex;
     flex-direction: column;
@@ -6,23 +14,12 @@
     overflow: hidden;
 }
 
-/* body styles */
 .notation-body {
     flex: 1;
     overflow: hidden;
     display: flex;
     flex-direction: row;
-}
-
-.notation-loading {
-    color: var(--muted);
-    font-size: 14px;
-}
-
-/* editor styles */
-.notation-editor {
-    width: 100%;
-    max-width: 780px;
+    position: relative;
 }
 
 .notation-editor-area {
@@ -31,6 +28,21 @@
     display: flex;
     justify-content: center;
     padding: 48px 24px;
+}
+
+.notation-loading {
+    color: var(--muted);
+    font-size: 14px;
+}
+
+
+/* ============================================================
+   EDITOR — Tiptap Container & Typography
+   ============================================================ */
+
+.notation-editor {
+    width: 100%;
+    max-width: 780px;
 }
 
 .notation-editor .tiptap {
@@ -47,7 +59,6 @@
     box-shadow: 0 2px 8px var(--shadow);
 }
 
-/* typography styles */
 .notation-editor .tiptap h1 {
     font-family: 'DM Serif Display', serif;
     font-size: 32px;
@@ -91,7 +102,6 @@
     padding: 1px 2px;
 }
 
-/* task list styles */
 .notation-editor .tiptap ul[data-type="taskList"] {
     list-style: none;
     padding: 0;
@@ -108,7 +118,6 @@
     user-select: none;
 }
 
-/* placeholder styles */
 .notation-editor .tiptap p.is-editor-empty:first-child::before {
     color: var(--muted);
     content: attr(data-placeholder);
@@ -117,7 +126,11 @@
     pointer-events: none;
 }
 
-/* toolbar styles */
+
+/* ============================================================
+   TOOLBAR — Tiptap Subbar & Buttons
+   ============================================================ */
+
 .tiptap-toolbar {
     display: flex;
     flex-direction: row;
@@ -125,22 +138,20 @@
     justify-content: flex-start;
     gap: 8px;
     flex: 1;
-    flex-wrap: wrap; 
-    overflow: visible; 
+    flex-wrap: wrap;
+    overflow: visible;
 }
 
-/* subbar section styles */
 .tiptap-toolbar .subbar-section {
     display: flex !important;
-    flex-direction: row !important; 
+    flex-direction: row !important;
     align-items: center !important;
     justify-content: flex-start !important;
     gap: 2px !important;
     border-right: 1px solid var(--border);
     padding-left: 8px !important;
     padding-right: 8px !important;
-    margin: 0 !important; 
-    
+    margin: 0 !important;
     flex: 0 0 auto !important;
     width: max-content !important;
     min-width: 0 !important;
@@ -155,7 +166,6 @@
     padding-right: 0 !important;
 }
 
-/* toolbar button styles */
 .tiptap-toolbar .subbar-section > button {
     height: 32px;
     min-width: 28px;
@@ -194,54 +204,6 @@
     margin-left: 8px;
 }
 
-/* color picker styles */
-.tiptap-color-btn {
-    flex-direction: column;
-    gap: 2px;
-    padding: 4px 6px !important;
-    height: 36px !important;
-}
-
-.tiptap-color-bar {
-    width: 18px;
-    height: 3px;
-    border-radius: 2px;
-}
-
-.tiptap-color-picker {
-    position: absolute;
-    top: calc(100% + 8px);
-    left: 50%;
-    transform: translateX(-50%);
-    background: white;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 8px;
-    display: grid; 
-    grid-template-columns: repeat(3, 1fr); 
-    gap: 6px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.12);
-    z-index: 9999; 
-    width: max-content;
-}
-
-.tiptap-color-swatch {
-    width: 24px !important; 
-    height: 24px !important;
-    min-width: 0 !important; 
-    padding: 0 !important;
-    border-radius: 50%;
-    cursor: pointer;
-    border: none;
-    transition: transform 0.15s;
-    display: block !important;
-}
-
-.tiptap-color-swatch:hover {
-    transform: scale(1.2);
-}
-
-/* save indicator styles */
 .notation-save-indicator {
     font-size: 12px;
     color: var(--muted);
@@ -249,7 +211,6 @@
     white-space: nowrap;
 }
 
-/* word count styles */
 .tiptap-toolbar .notation-word-count {
     font-size: 13px;
     color: var(--muted);
@@ -259,13 +220,10 @@
     padding-left: 0 !important;
     padding-right: 8px !important;
     font-variant-numeric: tabular-nums;
-    
-    /* Ensure the text aligns near the border */
     display: flex !important;
     justify-content: flex-end !important;
 }
 
-/* dropdown styles */
 .tiptap-select {
     height: 32px;
     padding: 0 24px 0 8px;
@@ -293,7 +251,62 @@
     border-color: var(--accent);
 }
 
-/* sidebar styles */
+
+/* ============================================================
+   TOOLBAR — Color Picker (Tiptap text color)
+   ============================================================ */
+
+.tiptap-color-btn {
+    flex-direction: column;
+    gap: 2px;
+    padding: 4px 6px !important;
+    height: 36px !important;
+}
+
+.tiptap-color-bar {
+    width: 18px;
+    height: 3px;
+    border-radius: 2px;
+}
+
+.tiptap-color-picker {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    z-index: 9999;
+    width: max-content;
+}
+
+.tiptap-color-swatch {
+    width: 24px !important;
+    height: 24px !important;
+    min-width: 0 !important;
+    padding: 0 !important;
+    border-radius: 50%;
+    cursor: pointer;
+    border: none;
+    transition: transform 0.15s;
+    display: block !important;
+}
+
+.tiptap-color-swatch:hover {
+    transform: scale(1.2);
+}
+
+
+/* ============================================================
+   SIDEBAR — Container & Toggle Button
+   ============================================================ */
+
 .notation-sidebar {
     width: 220px;
     flex-shrink: 0;
@@ -307,45 +320,45 @@
     align-self: stretch;
 }
 
-.notation-sidebar-group {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    margin-top: 4px;
-}
-
-.notation-sidebar-group-header {
+.notation-sidebar-toggle {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--muted);
+    font-size: 16px;
+    cursor: pointer;
     display: flex;
     align-items: center;
-    cursor: pointer;
-    user-select: none;
+    justify-content: center;
+    z-index: 10;
+    transition: left 0.2s, color 0.15s, background 0.15s;
+    line-height: 1;
 }
 
-.notation-sidebar-group-header:hover {
-    background: transparent;
+.notation-sidebar-toggle:hover {
+    background: var(--accent-lt);
+    color: var(--accent);
+    border-color: var(--accent);
 }
 
-.notation-sidebar-arrow {
-    font-size: 15px;
-    color: var(--ink);
-    flex-shrink: 0;
+.notation-sidebar-toggle.open {
+    left: 228px;
 }
 
-.notation-sidebar-group-name {
-    font-size: 13px;
-    color: var(--ink);
-    font-weight: 500;
+.notation-sidebar-toggle:not(.open) {
+    transform: rotate(180deg);
 }
 
-.notation-sidebar-group-pages {
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-    padding-left: 8px;
-    margin-bottom: 8px;
-}
 
-/* page row */
+/* ============================================================
+   SIDEBAR — Page Rows
+   ============================================================ */
+
 .notation-sidebar-page {
     display: flex;
     align-items: center;
@@ -393,168 +406,41 @@
     text-overflow: ellipsis;
 }
 
-/* add button */
-.notation-sidebar-add {
-    margin-top: 12px;
-    align-self: center;
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    border: 1px dashed var(--border);
-    background: transparent;
-    color: var(--muted);
-    font-size: 18px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: border-color 0.15s, color 0.15s, background 0.15s;
-    line-height: 1;
-}
 
-.notation-sidebar-add:hover {
-    border-color: var(--accent);
-    color: var(--accent);
-    background: var(--accent-lt);
-}
+/* ============================================================
+   SIDEBAR — Groups
+   ============================================================ */
 
-/* modal styles */
-.notation-modal-overlay {
-    position: fixed;
-    inset: 0;
-    z-index: 100;
-    background: rgba(0, 0, 0, 0.15);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.notation-modal {
-    background: white;
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 8px;
+.notation-sidebar-group {
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
-    min-width: 240px;
-}
-
-.notation-modal-option {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 10px 12px;
-    border-radius: 8px;
-    border: none;
-    background: transparent;
-    cursor: pointer;
-    text-align: left;
-    transition: background 0.15s;
-    width: 100%;
-}
-
-.notation-modal-option:hover {
-    background: var(--accent-lt);
-}
-
-.notation-modal-icon {
-    font-size: 20px;
-    flex-shrink: 0;
-}
-
-.notation-modal-label {
-    font-size: 14px;
-    font-weight: 500;
-    color: var(--ink);
-    margin: 0;
-}
-
-.notation-modal-sub {
-    font-size: 12px;
-    color: var(--muted);
-    margin: 2px 0 0;
-}
-
-.notation-modal-heading {
-    font-size: 12px;
-    color: var(--muted);
-    padding: 4px 12px;
-    font-weight: 500;
-}
-
-.notation-modal-option.selected {
-    background: var(--accent-lt);
-    color: var(--accent);
-}
-
-.notation-modal-option.selected .notation-modal-label {
-    color: var(--accent);
-}
-
-.notation-modal-confirm {
+    gap: 2px;
     margin-top: 4px;
-    width: 100%;
-    padding: 8px;
-    border-radius: 8px;
-    border: none;
-    background: var(--accent);
-    color: white;
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: opacity 0.15s;
 }
 
-.notation-modal-confirm:hover {
-    opacity: 0.9;
-}
-
-.notation-sidebar-group-add {
-    margin-left: auto;
-    width: 20px;
-    height: 20px;
-    border-radius: 4px;
-    border: none;
-    background: transparent;
-    color: var(--muted);
-    font-size: 16px;
-    cursor: pointer;
-    display: none;
-    align-items: center;
-    justify-content: center;
-    line-height: 1;
-    padding: 0;
-}
-
-.notation-sidebar-group-header:hover .notation-sidebar-group-add {
+.notation-sidebar-group-header {
     display: flex;
-}
-
-.notation-sidebar-group-add:hover {
-    background: var(--accent-lt);
-    color: var(--accent);
-}
-
-.notation-sidebar-group-color-btn {
-    border: none;
-    background: transparent;
-    cursor: pointer;
-    font-size: 12px;
-    padding: 0;
-    display: none;
     align-items: center;
-    justify-content: center;
-    width: 16px;
-    height: 16px;
-    transition: opacity 0.15s;
-    flex-shrink: 0;
+    cursor: pointer;
+    user-select: none;
 }
 
-.notation-sidebar-group-header:hover .notation-sidebar-group-color-btn {
-    display: flex;
+.notation-sidebar-group-header:hover {
+    background: transparent;
 }
+
+.notation-sidebar-group-pages {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding-left: 8px;
+    margin-bottom: 8px;
+}
+
+
+/* ============================================================
+   SIDEBAR — Group Pill
+   ============================================================ */
 
 .notation-sidebar-group-pill {
     flex: 1;
@@ -586,13 +472,182 @@
     display: block;
 }
 
-.notation-sidebar-group-color-btn,
-.notation-sidebar-group-add {
-    outline: none;
-    border: none;
+.notation-sidebar-arrow {
+    font-size: 15px;
+    color: var(--ink);
+    flex-shrink: 0;
 }
 
-.notation-sidebar-group-color-btn:focus,
-.notation-sidebar-group-add:focus {
+
+/* ============================================================
+   SIDEBAR — Group Action Buttons (add page, change color)
+   ============================================================ */
+
+.notation-sidebar-group-add,
+.notation-sidebar-group-color-btn {
+    background: transparent;
     outline: none;
+    border: none;
+    cursor: pointer;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    flex-shrink: 0;
+}
+
+.notation-sidebar-group-add {
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    color: var(--muted);
+    font-size: 16px;
+    line-height: 1;
+}
+
+.notation-sidebar-group-color-btn {
+    width: 16px;
+    height: 16px;
+    font-size: 12px;
+    transition: opacity 0.15s;
+}
+
+.notation-sidebar-group-pill:hover .notation-sidebar-group-add,
+.notation-sidebar-group-pill:hover .notation-sidebar-group-color-btn {
+    display: flex;
+}
+
+.notation-sidebar-group-add:hover {
+    background: rgba(0, 0, 0, 0.08);
+    color: var(--ink);
+}
+
+.notation-sidebar-group-add:focus,
+.notation-sidebar-group-color-btn:focus {
+    outline: none;
+}
+
+
+/* ============================================================
+   SIDEBAR — Ghost Add Button (bottom of sidebar)
+   ============================================================ */
+
+.notation-sidebar-add {
+    margin-top: 12px;
+    align-self: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 1px dashed var(--border);
+    background: transparent;
+    color: var(--muted);
+    font-size: 18px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: border-color 0.15s, color 0.15s, background 0.15s;
+    line-height: 1;
+}
+
+.notation-sidebar-add:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-lt);
+}
+
+
+/* ============================================================
+   MODAL — New Page / New Group
+   ============================================================ */
+
+.notation-modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    background: rgba(0, 0, 0, 0.15);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.notation-modal {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+    min-width: 240px;
+}
+
+.notation-modal-heading {
+    font-size: 12px;
+    color: var(--muted);
+    padding: 4px 12px;
+    font-weight: 500;
+}
+
+.notation-modal-option {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.15s;
+    width: 100%;
+}
+
+.notation-modal-option:hover {
+    background: var(--accent-lt);
+}
+
+.notation-modal-option.selected {
+    background: var(--accent-lt);
+}
+
+.notation-modal-option.selected .notation-modal-label {
+    color: var(--accent);
+}
+
+.notation-modal-icon {
+    font-size: 20px;
+    flex-shrink: 0;
+}
+
+.notation-modal-label {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--ink);
+    margin: 0;
+}
+
+.notation-modal-sub {
+    font-size: 12px;
+    color: var(--muted);
+    margin: 2px 0 0;
+}
+
+.notation-modal-confirm {
+    margin-top: 4px;
+    width: 100%;
+    padding: 8px;
+    border-radius: 8px;
+    border: none;
+    background: var(--accent);
+    color: white;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity 0.15s;
+}
+
+.notation-modal-confirm:hover {
+    opacity: 0.9;
 }

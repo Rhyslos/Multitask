@@ -169,7 +169,7 @@ export async function initializeDatabase() {
     CREATE INDEX IF NOT EXISTS idx_columns_tab ON kanban_columns(workspaceID, tabID);
     CREATE INDEX IF NOT EXISTS idx_notation_pages_workspace ON notation_pages(workspaceID);
     CREATE INDEX IF NOT EXISTS idx_notation_pages_group ON notation_pages(groupID);
-`);
+    `);
 
     return db;
 }

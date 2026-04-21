@@ -394,5 +394,19 @@ export class SyncManager {
                 params: [n.id, n.content, n.workspaceID, n.updatedAt, n.isDeleted],
             })));
         }
+
+        if (serverChanges.notation_groups?.length) {
+            await this.runBatch(serverChanges.notation_groups.map(g => ({
+                sql: `INSERT INTO notation_groups (id, name, workspaceID, groupOrder, updatedAt, isDeleted) VALUES (?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, workspaceID=excluded.workspaceID, groupOrder=excluded.groupOrder, updatedAt=excluded.updatedAt, isDeleted=excluded.isDeleted WHERE excluded.updatedAt > notation_groups.updatedAt`,
+                params: [g.id, g.name, g.workspaceID, g.groupOrder, g.updatedAt, g.isDeleted],
+            })));
+        }
+
+        if (serverChanges.notation_pages?.length) {
+            await this.runBatch(serverChanges.notation_pages.map(p => ({
+                sql: `INSERT INTO notation_pages (id, title, workspaceID, groupID, pageOrder, updatedAt, isDeleted) VALUES (?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET title=excluded.title, workspaceID=excluded.workspaceID, groupID=excluded.groupID, pageOrder=excluded.pageOrder, updatedAt=excluded.updatedAt, isDeleted=excluded.isDeleted WHERE excluded.updatedAt > notation_pages.updatedAt`,
+                params: [p.id, p.title, p.workspaceID, p.groupID, p.pageOrder, p.updatedAt, p.isDeleted],
+            })));
+        }
     }
 }

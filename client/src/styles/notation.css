@@ -561,36 +561,64 @@
    MODAL — New Page / New Group
    ============================================================ */
 
-.notation-modal-overlay {
-    position: fixed;
-    inset: 0;
-    z-index: 100;
-    background: rgba(0, 0, 0, 0.15);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
+/* notation modal styling */
 
 .notation-modal {
     background: white;
     border: 1px solid var(--border);
     border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    width: 260px;
+    overflow: hidden;
+}
+
+.notation-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+}
+
+.notation-modal-header h3 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ink);
+}
+
+.notation-modal-close {
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 14px;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+}
+
+.notation-modal-close:hover {
+    background: var(--accent-lt);
+    color: var(--accent);
+}
+
+.notation-modal-body {
     padding: 8px;
+}
+
+.notation-modal-actions-grid {
     display: flex;
     flex-direction: column;
     gap: 4px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
-    min-width: 240px;
 }
 
-.notation-modal-heading {
-    font-size: 12px;
-    color: var(--muted);
-    padding: 4px 12px;
-    font-weight: 500;
-}
-
-.notation-modal-option {
+.notation-modal-action-card,
+.notation-list-item {
     display: flex;
     align-items: center;
     gap: 12px;
@@ -604,16 +632,23 @@
     width: 100%;
 }
 
-.notation-modal-option:hover {
+.notation-modal-action-card:hover,
+.notation-list-item:hover {
     background: var(--accent-lt);
 }
 
-.notation-modal-option.selected {
+.notation-list-item.selected {
     background: var(--accent-lt);
 }
 
-.notation-modal-option.selected .notation-modal-label {
+.notation-list-item.selected .notation-modal-label {
     color: var(--accent);
+}
+
+.notation-modal-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
 }
 
 .notation-modal-icon {
@@ -631,23 +666,44 @@
 .notation-modal-sub {
     font-size: 12px;
     color: var(--muted);
-    margin: 2px 0 0;
+    margin: 0;
 }
 
-.notation-modal-confirm {
-    margin-top: 4px;
-    width: 100%;
-    padding: 8px;
-    border-radius: 8px;
-    border: none;
-    background: var(--accent);
-    color: white;
-    font-size: 14px;
+.notation-modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 12px 16px;
+    border-top: 1px solid var(--border);
+    background: var(--panel, #fafafa);
+}
+
+.notation-btn-secondary,
+.notation-btn-primary {
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 13px;
     font-weight: 500;
     cursor: pointer;
-    transition: opacity 0.15s;
+    transition: all 0.15s;
 }
 
-.notation-modal-confirm:hover {
+.notation-btn-secondary {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--ink);
+}
+
+.notation-btn-secondary:hover {
+    background: rgba(0, 0, 0, 0.04);
+}
+
+.notation-btn-primary {
+    background: var(--accent);
+    border: 1px solid var(--accent);
+    color: white;
+}
+
+.notation-btn-primary:hover {
     opacity: 0.9;
 }

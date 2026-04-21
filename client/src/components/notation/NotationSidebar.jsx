@@ -1,25 +1,39 @@
-// components/notation/NotationSidebar.jsx
 import { useState, useRef, useEffect } from 'react';
 import { useNotationSidebar } from '../../hooks/useNotationSidebar';
-import { createPortal } from 'react-dom'
+import { createPortal } from 'react-dom';
 
 export default function NotationSidebar({ workspaceID, activePageID, onPageSelect }) {
+    
+    // state hooks
     const { groups, pages, loading, createGroup, createPage, renameGroup, renamePage, colorGroup } = useNotationSidebar(workspaceID);
     const [collapsedGroups, setCollapsedGroups] = useState(new Set());
     const [showModal, setShowModal] = useState(false);
+    const [modalPos, setModalPos] = useState({ top: 0, left: 0 });
     const [selectedGroupID, setSelectedGroupID] = useState(null);
     const [step, setStep] = useState('main');
     const [editingGroupID, setEditingGroupID] = useState(null);
     const [editingColorID, setEditingColorID] = useState(null);
     const [pickerPos, setPickerPos] = useState({ top: 0, left: 0 });
+    const [editingPageID, setEditingPageID] = useState(null);
+
+    // reference hooks
     const nameRefs = useRef({});
     const colorBtnRefs = useRef({});
-    const [editingPageID, setEditingPageID] = useState(null);
     const pageTitleRefs = useRef({});
-    const [sidebarOpen, setSidebarOpen] = useState(true);
 
+    // data derived
     const uncategorized = pages.filter(p => p.groupID === null);
+    const PRESET_COLORS = [
+        { color: '#ffb3b3', label: 'Red'     },
+        { color: '#ffd0a8', label: 'Orange'  },
+        { color: '#fff0a8', label: 'Yellow'  },
+        { color: '#b8f0c8', label: 'Green'   },
+        { color: '#b3d8ff', label: 'Blue'    },
+        { color: '#ffb3d9', label: 'Pink'    },
+        { color: '#e8b3ff', label: 'Magenta' },
+    ];
 
+    // group handlers
     function toggleGroup(groupID) {
         setCollapsedGroups(prev => {
             const next = new Set(prev);
@@ -74,6 +88,7 @@ export default function NotationSidebar({ workspaceID, activePageID, onPageSelec
         setEditingColorID(group.id);
     }
 
+    // page handlers
     function startEditingPage(page) {
         setEditingPageID(page.id);
         const el = pageTitleRefs.current[page.id];
@@ -109,6 +124,7 @@ export default function NotationSidebar({ workspaceID, activePageID, onPageSelec
         }
     }
 
+    // modal handlers
     function handleModalClose() {
         setShowModal(false);
         setStep('main');
@@ -126,6 +142,7 @@ export default function NotationSidebar({ workspaceID, activePageID, onPageSelec
         handleModalClose();
     }
 
+    // side effects
     useEffect(() => {
         if (!editingColorID) return;
         function handleClose() { setEditingColorID(null); }
@@ -139,23 +156,31 @@ export default function NotationSidebar({ workspaceID, activePageID, onPageSelec
         };
     }, [editingColorID]);
 
-        const PRESET_COLORS = [
-        { color: '#ffb3b3', label: 'Red'     },
-        { color: '#ffd0a8', label: 'Orange'  },
-        { color: '#fff0a8', label: 'Yellow'  },
-        { color: '#b8f0c8', label: 'Green'   },
-        { color: '#b3d8ff', label: 'Blue'    },
-        { color: '#ffb3d9', label: 'Pink'    },
-        { color: '#e8b3ff', label: 'Magenta' },
-    ];
+    useEffect(() => {
+        if (!showModal) return;
+        function handleClose() {
+            setShowModal(false);
+            setStep('main');
+            setSelectedGroupID(null);
+        }
+        document.addEventListener('mousedown', handleClose);
+        window.addEventListener('scroll', handleClose, true);
+        window.addEventListener('resize', handleClose);
+        return () => {
+            document.removeEventListener('mousedown', handleClose);
+            window.removeEventListener('scroll', handleClose, true);
+            window.removeEventListener('resize', handleClose);
+        };
+    }, [showModal]);
 
     if (loading) return <div className="notation-sidebar" />;
 
+    // render component
     return (
         <>
             <div className="notation-sidebar">
 
-                {/* uncategorized pages */}
+                {/* page list rendering */}
                 {uncategorized.map(page => (
                     <div
                         key={page.id}
@@ -178,7 +203,7 @@ export default function NotationSidebar({ workspaceID, activePageID, onPageSelec
                     </div>
                 ))}
 
-                {/* groups */}
+                {/* group list rendering */}
                 {groups.map(group => {
                     const groupPages = pages.filter(p => p.groupID === group.id);
                     const isCollapsed = collapsedGroups.has(group.id);
@@ -260,73 +285,88 @@ export default function NotationSidebar({ workspaceID, activePageID, onPageSelec
                     );
                 })}
 
-                {/* ghost add button */}
+                {/* global actions rendering */}
                 <button
                     className="notation-sidebar-add"
-                    onClick={() => setShowModal(true)}
+                    onClick={(e) => {
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        setModalPos({ top: rect.bottom + 8, left: rect.left });
+                        setShowModal(true);
+                    }}
                 >
                     +
                 </button>
             </div>
 
-            {/* modal */}
-            {showModal && (
-                <div className="notation-modal-overlay" onClick={handleModalClose}>
-                    <div className="notation-modal" onClick={e => e.stopPropagation()}>
-
+            {/* modal rendering */}
+            {showModal && createPortal(
+                <div 
+                    className="notation-modal" 
+                    style={{ position: 'absolute', top: modalPos.top, left: modalPos.left, zIndex: 1000, margin: 0, transform: 'none' }}
+                    onMouseDown={e => e.stopPropagation()}
+                >
+                    <div className="notation-modal-header">
+                        <h3>{step === 'main' ? 'Create New' : 'Select Group'}</h3>
+                        <button className="notation-modal-close" onClick={handleModalClose}>✕</button>
+                    </div>
+                    
+                    <div className="notation-modal-body">
                         {step === 'main' && (
-                            <>
-                                <button className="notation-modal-option" onClick={() => setStep('page')}>
-                                    <span className="notation-modal-icon">📄</span>
-                                    <div>
+                            <div className="notation-modal-actions-grid">
+                                <button className="notation-modal-action-card" onClick={() => setStep('page')}>
+                                    <div className="notation-modal-text">
                                         <p className="notation-modal-label">New page</p>
                                         <p className="notation-modal-sub">Add a notation page</p>
                                     </div>
                                 </button>
-                                <button className="notation-modal-option" onClick={handleNewGroup}>
-                                    <span className="notation-modal-icon">📁</span>
-                                    <div>
+                                <button className="notation-modal-action-card" onClick={handleNewGroup}>
+                                    <div className="notation-modal-text">
                                         <p className="notation-modal-label">New group</p>
-                                        <p className="notation-modal-sub">Organize pages into a group</p>
+                                        <p className="notation-modal-sub">Organize pages</p>
                                     </div>
                                 </button>
-                            </>
+                            </div>
                         )}
 
                         {step === 'page' && (
-                            <>
-                                <p className="notation-modal-heading">Add to group</p>
+                            <div className="notation-modal-list">
                                 <button
-                                    className={`notation-modal-option ${selectedGroupID === null ? 'selected' : ''}`}
+                                    className={`notation-list-item ${selectedGroupID === null ? 'selected' : ''}`}
                                     onClick={() => setSelectedGroupID(null)}
                                 >
                                     <span className="notation-modal-icon">📄</span>
-                                    <div>
-                                        <p className="notation-modal-label">Uncategorized</p>
-                                        <p className="notation-modal-sub">No group</p>
-                                    </div>
+                                    <p className="notation-modal-label">Uncategorized</p>
                                 </button>
                                 {groups.map(group => (
                                     <button
                                         key={group.id}
-                                        className={`notation-modal-option ${selectedGroupID === group.id ? 'selected' : ''}`}
+                                        className={`notation-list-item ${selectedGroupID === group.id ? 'selected' : ''}`}
                                         onClick={() => setSelectedGroupID(group.id)}
                                     >
                                         <span className="notation-modal-icon">📁</span>
-                                        <div>
-                                            <p className="notation-modal-label">{group.name}</p>
-                                        </div>
+                                        <p className="notation-modal-label">{group.name}</p>
                                     </button>
                                 ))}
-                                <button className="notation-modal-confirm" onClick={handleNewPage}>
-                                    Create page
-                                </button>
-                            </>
+                            </div>
                         )}
-
                     </div>
-                </div>
+
+                    {/* modal footer rendering */}
+                    {step === 'page' && (
+                        <div className="notation-modal-footer">
+                            <button className="notation-btn-secondary" onClick={() => setStep('main')}>
+                                Back
+                            </button>
+                            <button className="notation-btn-primary" onClick={handleNewPage}>
+                                Create page
+                            </button>
+                        </div>
+                    )}
+                </div>,
+                document.body
             )}
+            
+            {/* context menu rendering */}
             {editingColorID && createPortal(
                 <div
                     className="kanban-tab-color-picker"

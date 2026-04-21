@@ -22,7 +22,7 @@ const SCHEMA_SQL = `
   CREATE INDEX IF NOT EXISTS idx_columns_tab ON kanban_columns(workspaceID, tabID);
 `;
 
-const SYNC_TABLES = ['users', 'categories', 'workspaces', 'workspace_members', 'kanban_tabs', 'kanban_columns', 'lists', 'tasks', 'notes'];
+const SYNC_TABLES = ['users', 'categories', 'workspaces', 'workspace_members', 'kanban_tabs', 'kanban_columns', 'lists', 'tasks', 'notes', 'notation_groups', 'notation_pages'];
 
 let instancePromise = null;
 

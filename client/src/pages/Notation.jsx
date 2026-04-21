@@ -24,7 +24,6 @@ export default function Notation() {
     // provider setup
     const { ydoc, provider } = useMemo(() => {
         const doc = new Y.Doc();
-        // workspaceID acts as the unique "room" name so users in the same workspace sync together
         const wsProvider = new WebsocketProvider(
             'ws://localhost:8080',
             workspaceID,
@@ -36,7 +35,7 @@ export default function Notation() {
     // lifecycle hooks
     useEffect(() => {
         provider.on('status', event => {
-            setStatus(event.status); // Will update to 'connected' or 'disconnected'
+            setStatus(event.status); 
         });
 
         return () => {
@@ -60,8 +59,6 @@ export default function Notation() {
                 }
             })
         ],
-        // Notice we deleted the 'content' and 'onUpdate' properties.
-        // Yjs now completely handles fetching and saving data automatically!
     });
 
     // ui rendering

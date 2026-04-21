@@ -1,9 +1,6 @@
 import { useEffect, useRef } from 'react';
 import KanbanTask from './KanbanTask';
 
-// Renders a single list and the tasks inside it.
-// Receives only its own list object and its own tasks — no awareness of
-// columns, other lists, or the full task array.
 export default function KanbanList({
     list,
     tasks,

@@ -1,9 +1,14 @@
 import { useState } from 'react';
 import { useAuth } from '../../hooks/useAuth';
+// Import useSync to get the SyncManager instance
+import { useSync } from '../../hooks/useSync';
 
 // Component
 export default function WorkspaceSettingsModal({ workspace, onClose }) {
     const { user } = useAuth();
+    // Grab the sync manager from context
+    const { sm } = useSync();
+    
     const [inviteEmail, setInviteEmail] = useState('');
     const [status, setStatus] = useState({ type: '', text: '' });
     const [loading, setLoading] = useState(false);
@@ -16,6 +21,13 @@ export default function WorkspaceSettingsModal({ workspace, onClose }) {
         setStatus({ type: '', text: '' });
 
         try {
+            // 1. Force a blocking sync to guarantee the server knows about this workspace 
+            // before we try to create an invitation for it.
+            if (sm) {
+                await sm.forceSync();
+            }
+
+            // 2. Send the invitation
             const res = await fetch('http://localhost:8080/api/invites/send', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

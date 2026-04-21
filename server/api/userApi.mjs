@@ -32,8 +32,8 @@ export default function createUserRouter(db) {
 
         if (!email || !password)
             return res.status(400).json({ error: 'Email and password are required.' });
-        if (password.length < 6)
-            return res.status(400).json({ error: 'Password must be at least 6 characters.' });
+        if (password.length < 8)
+            return res.status(400).json({ error: 'Password must be at least 8 characters.' });
 
         const existing = await db.get('SELECT id FROM users WHERE email = ?', email);
         if (existing)
@@ -43,8 +43,8 @@ export default function createUserRouter(db) {
         const id = crypto.randomUUID();
 
         await db.run(
-            'INSERT INTO users (id, email, password_hash, countryIso) VALUES (?, ?, ?, ?)',
-            id, email, password_hash, countryIso || 'us'
+            'INSERT INTO users (id, email, password_hash, countryIso, privacySettings) VALUES (?, ?, ?, ?, ?)',
+            id, email, password_hash, countryIso || 'us', '{}'
         );
 
         return res.status(201).json({ 
@@ -56,7 +56,8 @@ export default function createUserRouter(db) {
                 countryIso: countryIso || 'us',
                 phoneNumber: null, 
                 skillset: '[]', 
-                gender: null 
+                gender: null,
+                privacySettings: '{}'
             } 
         });
     }));
@@ -85,7 +86,8 @@ export default function createUserRouter(db) {
                 countryIso: user.countryIso,
                 phoneNumber: user.phoneNumber,
                 skillset: user.skillset,
-                gender: user.gender
+                gender: user.gender,
+                privacySettings: user.privacySettings
             } 
         });
     }));
@@ -93,7 +95,7 @@ export default function createUserRouter(db) {
     // user profile functions
     router.get('/:id/profile', catchAsync(async (req, res) => {
         const user = await db.get(
-            'SELECT id, email, firstName, lastName, countryIso, phoneNumber, skillset, gender FROM users WHERE id = ?',
+            'SELECT id, email, firstName, lastName, countryIso, phoneNumber, skillset, gender, privacySettings FROM users WHERE id = ?',
             req.params.id
         );
 
@@ -106,7 +108,7 @@ export default function createUserRouter(db) {
 
     // profile update route
     router.patch('/:id/profile', catchAsync(async (req, res) => {
-        const { firstName, lastName, email, countryIso, phoneNumber, skillset, gender } = req.body;
+        const { displayName, firstName, lastName, email, countryIso, phoneNumber, skillset, gender, privacySettings } = req.body;
         
         const existing = await db.get('SELECT id FROM users WHERE email = ? AND id != ?', email, req.params.id);
         if (existing) return res.status(409).json({ error: 'Email already in use by another account.' });
@@ -114,11 +116,12 @@ export default function createUserRouter(db) {
         const skillsetStr = skillset ? JSON.stringify(skillset) : '[]';
 
         await db.run(
-            'UPDATE users SET firstName = ?, lastName = ?, email = ?, countryIso = ?, phoneNumber = ?, skillset = ?, gender = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?',
-            firstName || null, lastName || null, email, countryIso || null, phoneNumber || null, skillsetStr, gender || null, req.params.id
+            'UPDATE users SET displayName = ?, firstName = ?, lastName = ?, email = ?, countryIso = ?, phoneNumber = ?, skillset = ?, gender = ?, privacySettings = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?',
+            displayName || null, firstName || null, lastName || null, email, countryIso || null, phoneNumber || null, skillsetStr, gender || null, privacySettings || '{}', req.params.id
         );
         
-        const user = await db.get('SELECT id, email, firstName, lastName, countryIso, phoneNumber, skillset, gender FROM users WHERE id = ?', req.params.id);
+        // ADD displayName to the SELECT statement:
+        const user = await db.get('SELECT id, email, displayName, firstName, lastName, countryIso, phoneNumber, skillset, gender, privacySettings FROM users WHERE id = ?', req.params.id);
         return res.json({ user });
     }));
 

@@ -78,12 +78,35 @@ function InternalCountrySelect({ value, onChange }) {
     );
 }
 
-// user functions
+// component functions
+function PrivacySelector({ value, onChange }) {
+    return (
+        <select
+            value={value || 'public'}
+            onChange={e => onChange(e.target.value)}
+            style={{ 
+                marginLeft: 'auto', 
+                fontSize: '0.75rem', 
+                padding: '2px 4px', 
+                borderRadius: '4px', 
+                background: 'transparent', 
+                color: 'var(--muted)', 
+                border: '1px solid var(--border)' 
+            }}
+        >
+            <option value="public">Public</option>
+            <option value="associates">Associates Only</option>
+            <option value="private">Private</option>
+        </select>
+    );
+}
+
 // user functions
 export default function UserProfile() {
     const { user, updateUser } = useAuth();
 
     // state initialization functions
+    const [displayName, setDisplayName] = useState(user?.displayName || '');
     const [firstName, setFirstName] = useState(user?.firstName || '');
     const [lastName, setLastName] = useState(user?.lastName || '');
     const [email, setEmail] = useState(user?.email || '');
@@ -96,6 +119,14 @@ export default function UserProfile() {
             return user?.skillset ? JSON.parse(user.skillset) : [''];
         } catch {
             return [''];
+        }
+    });
+
+    const [privacySettings, setPrivacySettings] = useState(() => {
+        try {
+            return user?.privacySettings ? JSON.parse(user.privacySettings) : {};
+        } catch {
+            return {};
         }
     });
 
@@ -114,6 +145,7 @@ export default function UserProfile() {
     // effect handler functions
     useEffect(() => {
         if (user) {
+            setDisplayName(user.displayName || '');
             setFirstName(user.firstName || '');
             setLastName(user.lastName || '');
             setEmail(user.email || '');
@@ -125,15 +157,22 @@ export default function UserProfile() {
             } catch {
                 setSkillset(['']);
             }
+            try {
+                if (user.privacySettings) {
+                    setPrivacySettings(typeof user.privacySettings === 'string' 
+                        ? JSON.parse(user.privacySettings) 
+                        : user.privacySettings);
+                }
+            } catch {
+                setPrivacySettings({});
+            }
         }
     }, [user]);
 
     // data mapping functions
     const selectedCountry = COUNTRIES.find(c => c.iso === countryIso.toLowerCase()) || COUNTRIES.find(c => c.iso === 'us');
 
-    const displayName = (firstName.trim() || lastName.trim())
-        ? `${firstName} ${lastName}`.trim()
-        : email;
+    const primaryNameDisplay = displayName.trim() || ((firstName.trim() || lastName.trim()) ? `${firstName} ${lastName}`.trim() : email);
 
     // event handler functions
     function handleCountryChange(iso) {
@@ -158,6 +197,10 @@ export default function UserProfile() {
         setSkillset(newSkills.length ? newSkills : ['']);
     }
 
+    function handlePrivacyChange(field, value) {
+        setPrivacySettings(prev => ({ ...prev, [field]: value }));
+    }
+
     // api submission functions
     async function handleProfileUpdate(e) {
         e.preventDefault();
@@ -170,13 +213,15 @@ export default function UserProfile() {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
+                    displayName,
                     firstName,
                     lastName,
                     email,
                     countryIso,
                     phoneNumber,
                     skillset: filteredSkills,
-                    gender
+                    gender,
+                    privacySettings: JSON.stringify(privacySettings)
                 }),
             });
             const data = await res.json();
@@ -253,26 +298,43 @@ export default function UserProfile() {
                     <div className="profile-section">
                         <h2 className="profile-section-title">Personal Information</h2>
                         <form className="profile-form" onSubmit={handleProfileUpdate}>
-                            <div className="profile-row">
+                            
+                            <div className="profile-field">
+                                <label htmlFor="displayName">Display Name (Username)</label>
+                                <input
+                                    id="displayName"
+                                    type="text"
+                                    value={displayName}
+                                    onChange={e => setDisplayName(e.target.value)}
+                                    placeholder="e.g., CoolCollaborator99"
+                                />
+                            </div>
+
+                            <div className="profile-field" style={{ marginBottom: '8px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center' }}>
+                                    <label style={{ margin: 0 }}>Real Name</label>
+                                    <PrivacySelector value={privacySettings.realName} onChange={v => handlePrivacyChange('realName', v)} />
+                                </div>
+                            </div>
+
+                            <div className="profile-row" style={{ marginTop: 0 }}>
                                 <div className="profile-field">
-                                    <label htmlFor="firstName">First Name</label>
                                     <input
                                         id="firstName"
                                         type="text"
                                         value={firstName}
                                         onChange={e => setFirstName(e.target.value)}
-                                        placeholder="Jane"
+                                        placeholder="First Name"
                                         autoComplete="given-name"
                                     />
                                 </div>
                                 <div className="profile-field">
-                                    <label htmlFor="lastName">Last Name</label>
                                     <input
                                         id="lastName"
                                         type="text"
                                         value={lastName}
                                         onChange={e => setLastName(e.target.value)}
-                                        placeholder="Doe"
+                                        placeholder="Last Name"
                                         autoComplete="family-name"
                                     />
                                 </div>
@@ -292,7 +354,10 @@ export default function UserProfile() {
 
                             <div className="profile-row">
                                 <div className="profile-field profile-phone-field">
-                                    <label>Phone Number</label>
+                                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                                        <label>Phone Number</label>
+                                        <PrivacySelector value={privacySettings.phoneNumber} onChange={v => handlePrivacyChange('phoneNumber', v)} />
+                                    </div>
                                     <div className="profile-phone-group">
                                         <InternalCountrySelect value={countryIso} onChange={handleCountryChange} />
                                         <input
@@ -308,7 +373,10 @@ export default function UserProfile() {
                                     </div>
                                 </div>
                                 <div className="profile-field">
-                                    <label htmlFor="gender">Gender (Optional)</label>
+                                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                                        <label htmlFor="gender">Gender (Optional)</label>
+                                        <PrivacySelector value={privacySettings.gender} onChange={v => handlePrivacyChange('gender', v)} />
+                                    </div>
                                     <select
                                         id="gender"
                                         value={gender}
@@ -324,7 +392,10 @@ export default function UserProfile() {
                             </div>
 
                             <div className="profile-field">
-                                <label>Skillset</label>
+                                <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
+                                    <label style={{ margin: 0 }}>Skillset</label>
+                                    <PrivacySelector value={privacySettings.skillset} onChange={v => handlePrivacyChange('skillset', v)} />
+                                </div>
                                 {skillset.map((skill, index) => (
                                     <div key={index} style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
                                         <input
@@ -351,6 +422,14 @@ export default function UserProfile() {
                                 >
                                     + Add Skill
                                 </button>
+                            </div>
+
+                            <div className="profile-field">
+                                <div style={{ display: 'flex', alignItems: 'center' }}>
+                                    <label>Location (Country)</label>
+                                    <PrivacySelector value={privacySettings.countryIso} onChange={v => handlePrivacyChange('countryIso', v)} />
+                                </div>
+                                <span style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>Your flag is determined by your phone number selection.</span>
                             </div>
 
                             {profileMessage.text && (

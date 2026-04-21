@@ -1,8 +1,5 @@
 import KanbanList from './KanbanList';
 
-// Renders a single column. Receives its own column object, the lists that
-// belong to it, and a tasksByListID map so each list can look up its tasks
-// without the column needing to know about tasks at all.
 export default function KanbanColumn({
     column,
     lists,

@@ -9,11 +9,9 @@
 /* body styles */
 .notation-body {
     flex: 1;
-    overflow-y: auto;
+    overflow: hidden;
     display: flex;
-    justify-content: center;
-    padding: 48px 24px;
-    position: relative;
+    flex-direction: row;
 }
 
 .notation-loading {
@@ -25,6 +23,14 @@
 .notation-editor {
     width: 100%;
     max-width: 780px;
+}
+
+.notation-editor-area {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    justify-content: center;
+    padding: 48px 24px;
 }
 
 .notation-editor .tiptap {
@@ -285,4 +291,308 @@
 .tiptap-select:focus {
     outline: none;
     border-color: var(--accent);
+}
+
+/* sidebar styles */
+.notation-sidebar {
+    width: 220px;
+    flex-shrink: 0;
+    border-right: 1px solid var(--border);
+    background: var(--panel);
+    display: flex;
+    flex-direction: column;
+    padding: 12px 8px;
+    overflow-y: auto;
+    gap: 2px;
+    align-self: stretch;
+}
+
+.notation-sidebar-group {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-top: 4px;
+}
+
+.notation-sidebar-group-header {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    user-select: none;
+}
+
+.notation-sidebar-group-header:hover {
+    background: transparent;
+}
+
+.notation-sidebar-arrow {
+    font-size: 15px;
+    color: var(--ink);
+    flex-shrink: 0;
+}
+
+.notation-sidebar-group-name {
+    font-size: 13px;
+    color: var(--ink);
+    font-weight: 500;
+}
+
+.notation-sidebar-group-pages {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding-left: 8px;
+    margin-bottom: 8px;
+}
+
+/* page row */
+.notation-sidebar-page {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.notation-sidebar-page:hover {
+    background: var(--accent-lt);
+}
+
+.notation-sidebar-page.active {
+    background: var(--accent-lt);
+}
+
+.notation-sidebar-page.active .notation-sidebar-page-title {
+    color: var(--accent);
+    font-weight: 500;
+}
+
+.notation-sidebar-page.active .notation-sidebar-dot {
+    background: var(--accent);
+}
+
+.notation-sidebar-page.indented {
+    padding-left: 24px;
+}
+
+.notation-sidebar-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--muted);
+    flex-shrink: 0;
+}
+
+.notation-sidebar-page-title {
+    font-size: 13px;
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* add button */
+.notation-sidebar-add {
+    margin-top: 12px;
+    align-self: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 1px dashed var(--border);
+    background: transparent;
+    color: var(--muted);
+    font-size: 18px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: border-color 0.15s, color 0.15s, background 0.15s;
+    line-height: 1;
+}
+
+.notation-sidebar-add:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-lt);
+}
+
+/* modal styles */
+.notation-modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    background: rgba(0, 0, 0, 0.15);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.notation-modal {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+    min-width: 240px;
+}
+
+.notation-modal-option {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.15s;
+    width: 100%;
+}
+
+.notation-modal-option:hover {
+    background: var(--accent-lt);
+}
+
+.notation-modal-icon {
+    font-size: 20px;
+    flex-shrink: 0;
+}
+
+.notation-modal-label {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--ink);
+    margin: 0;
+}
+
+.notation-modal-sub {
+    font-size: 12px;
+    color: var(--muted);
+    margin: 2px 0 0;
+}
+
+.notation-modal-heading {
+    font-size: 12px;
+    color: var(--muted);
+    padding: 4px 12px;
+    font-weight: 500;
+}
+
+.notation-modal-option.selected {
+    background: var(--accent-lt);
+    color: var(--accent);
+}
+
+.notation-modal-option.selected .notation-modal-label {
+    color: var(--accent);
+}
+
+.notation-modal-confirm {
+    margin-top: 4px;
+    width: 100%;
+    padding: 8px;
+    border-radius: 8px;
+    border: none;
+    background: var(--accent);
+    color: white;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity 0.15s;
+}
+
+.notation-modal-confirm:hover {
+    opacity: 0.9;
+}
+
+.notation-sidebar-group-add {
+    margin-left: auto;
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    font-size: 16px;
+    cursor: pointer;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    padding: 0;
+}
+
+.notation-sidebar-group-header:hover .notation-sidebar-group-add {
+    display: flex;
+}
+
+.notation-sidebar-group-add:hover {
+    background: var(--accent-lt);
+    color: var(--accent);
+}
+
+.notation-sidebar-group-color-btn {
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-size: 12px;
+    padding: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    transition: opacity 0.15s;
+    flex-shrink: 0;
+}
+
+.notation-sidebar-group-header:hover .notation-sidebar-group-color-btn {
+    display: flex;
+}
+
+.notation-sidebar-group-pill {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 10px;
+    border-radius: 20px;
+    min-width: 0;
+    min-height: 36px;
+    overflow: hidden;
+}
+
+.notation-sidebar-group-pill:hover {
+    filter: brightness(0.92);
+}
+
+.notation-sidebar-group-pill .notation-sidebar-group-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--ink);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    outline: none;
+    flex: 1;
+    min-width: 0;
+    width: 100%;
+    display: block;
+}
+
+.notation-sidebar-group-color-btn,
+.notation-sidebar-group-add {
+    outline: none;
+    border: none;
+}
+
+.notation-sidebar-group-color-btn:focus,
+.notation-sidebar-group-add:focus {
+    outline: none;
 }

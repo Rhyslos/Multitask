@@ -144,6 +144,7 @@ export async function initializeDatabase() {
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
         workspaceID TEXT NOT NULL,
+        color TEXT,
         groupOrder INTEGER NOT NULL DEFAULT 0,
         updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
         isDeleted INTEGER DEFAULT 0,
@@ -158,8 +159,7 @@ export async function initializeDatabase() {
         pageOrder INTEGER NOT NULL DEFAULT 0,
         updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
         isDeleted INTEGER DEFAULT 0,
-        FOREIGN KEY (workspaceID) REFERENCES workspaces (id) ON DELETE CASCADE,
-        FOREIGN KEY (groupID) REFERENCES notation_groups (id) ON DELETE SET NULL
+        FOREIGN KEY (workspaceID) REFERENCES workspaces (id) ON DELETE CASCADE
     );
 
     CREATE INDEX IF NOT EXISTS idx_workspace_members_user_ws ON workspace_members(userID, workspaceID);

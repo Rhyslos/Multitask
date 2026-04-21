@@ -707,3 +707,40 @@
 .notation-btn-primary:hover {
     opacity: 0.9;
 }
+
+/* ============================================================
+   COLLABORATION — Remote Cursors
+   ============================================================ */
+
+.collab-cursor {
+    border-left: 2px solid;
+    border-right: none;
+    margin-left: -1px;
+    margin-right: 0;
+    pointer-events: none;
+    position: relative;
+    word-break: normal;
+    display: inline;
+}
+
+.collab-cursor__label {
+    position: absolute;
+    top: -1.6em;
+    left: -1px;
+    font-size: 11px;
+    font-family: 'Noto Sans', sans-serif;
+    font-weight: 500;
+    line-height: 1.4;
+    white-space: nowrap;
+    padding: 1px 6px;
+    border-radius: 4px 4px 4px 0;
+    color: white;
+    user-select: none;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+
+.collab-cursor:hover .collab-cursor__label {
+    opacity: 1;
+}

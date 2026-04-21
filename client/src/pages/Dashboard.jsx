@@ -67,7 +67,6 @@ export default function Dashboard() {
                                     className="workspace-card"
                                     onClick={() => handleOpen(ws.id)}
                                 >
-                                    {/* Header Row: Tag and Action Buttons */}
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
                                         {ws.categoryName ? (
                                             <span

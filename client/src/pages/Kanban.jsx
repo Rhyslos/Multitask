@@ -24,10 +24,6 @@ export default function Kanban() {
         useTabs(workspaceID);
 
     // --- Data layer ---
-    // Each hook is scoped to the correct level of the hierarchy.
-    // Columns own their ID. Lists are fetched by columnIDs. Tasks by listIDs.
-    // The page derives the ID arrays so hooks always get a stable reference.
-
     const { columns, addColumn, deleteColumn } =
         useColumns(workspaceID, activeTabId);
 
@@ -71,8 +67,7 @@ export default function Kanban() {
         tasks,
         onReorder: reorderTasks,
         onGhostDrop: async (key, task) => {
-            // A task was dropped onto a ghost target — create a new column
-            // with one list and move the task into it.
+
             const isNewColumn = key === "new-column";
             const targetIndex = isNewColumn
                 ? columns.length
@@ -92,7 +87,6 @@ export default function Kanban() {
     const draggingTask = tasks.find(t => t.id === dragging);
 
     // --- Layout ---
-    // Column count comes from the actual columns array, not derived from lists.
     const columnCount = columns.length;
     const plusButtonCount = columnCount + 1;
     const boardInnerWidth = columnCount * (300 + 16) + 24 + (isDragging ? 316 : 0);
@@ -103,11 +97,6 @@ export default function Kanban() {
         }
     }
 
-    // Clicking a + button at position i:
-    //   - If a column already exists at that index → add a list into it
-    //   - If no column exists at that index → create the column first, then add a list
-    // This is what makes lists grow both horizontally (new column) and
-    // vertically (new list in an existing column).
     async function handleAddColumn(columnIndex) {
         const existingColumn = columns.find(c => c.columnIndex === columnIndex);
 

@@ -58,7 +58,7 @@ export default function UserProfileModal({ member, onClose }) {
 
     // parsing data
     const isSelf = user?.id === member.id;
-    const isAssociate = true; // Assuming being in the same workspace makes them an associate
+    const isAssociate = true; 
     
     let privacy = {};
     try {

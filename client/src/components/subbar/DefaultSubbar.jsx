@@ -7,7 +7,6 @@ export default function DefaultSubbar() {
     const [collapsed, setCollapsed] = useState(false);
     const { invites, loading, respondToInvite } = usePendingInvites();
 
-    // Helper to render dynamic, urgent items strictly within subbar constraints
     const renderActionItems = () => {
         if (loading || invites.length === 0) return null;
 
@@ -18,7 +17,7 @@ export default function DefaultSubbar() {
                     minWidth: 'auto', 
                     paddingRight: '24px', 
                     marginRight: '8px',
-                    borderRight: '1px solid var(--border)' // Adds a clean divider
+                    borderRight: '1px solid var(--border)' 
                 }}
             >
                 <span className="subbar-label" style={{ color: 'var(--accent)' }}>Action Required</span>
@@ -28,9 +27,9 @@ export default function DefaultSubbar() {
                     flexDirection: 'column', 
                     gap: '6px', 
                     marginTop: '4px',
-                    maxHeight: '44px', // Keeps it perfectly inside the 100px subbar limit
-                    overflowY: 'auto', // Allows scrolling if there are 3+ invites
-                    paddingRight: '4px' // Buffer for the scrollbar
+                    maxHeight: '44px', 
+                    overflowY: 'auto', 
+                    paddingRight: '4px' 
                 }}>
                     {invites.map(invite => (
                         <div 
@@ -47,7 +46,7 @@ export default function DefaultSubbar() {
                                 whiteSpace: 'nowrap', 
                                 overflow: 'hidden', 
                                 textOverflow: 'ellipsis',
-                                maxWidth: '200px' // Prevents super long emails from breaking the row
+                                maxWidth: '200px' 
                             }}>
                                 <strong>{invite.senderEmail}</strong> invited you
                             </span>
@@ -91,7 +90,6 @@ export default function DefaultSubbar() {
 
     return (
         <Subbar>
-            {/* ACTION ITEMS: Perfectly flat and constrained */}
             {renderActionItems()}
 
             {/* STANDARD SECTIONS */}

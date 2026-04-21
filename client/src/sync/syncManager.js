@@ -247,7 +247,6 @@ export class SyncManager {
     async forceSync() {
         if (!this._online || !this._userId) return;
         
-        // Cancel any pending debounced syncs
         clearTimeout(this._syncDebounceTimer);
         
         try {

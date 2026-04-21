@@ -5,10 +5,9 @@ let db;
 self.onmessage = async (event) => {
   const { type, sql, params, statements, msgId, dbName } = event.data;
 
-  // Wait for explicit INIT command to set the per-user database name
   if (type === 'INIT') {
     try {
-      if (db) db.close(); // Close existing if switching users
+      if (db) db.close(); 
       const sqlite3 = await sqlite3InitModule();
       if (sqlite3.opfs) {
         db = new sqlite3.oo1.OpfsDb(`/${dbName}.sqlite3`);

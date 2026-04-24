@@ -10,7 +10,7 @@ const SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS workspace_members (id TEXT PRIMARY KEY, workspaceID TEXT NOT NULL, userID TEXT NOT NULL, role TEXT DEFAULT 'editor', updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP, isDeleted INTEGER DEFAULT 0);
   CREATE TABLE IF NOT EXISTS kanban_tabs (id TEXT PRIMARY KEY, name TEXT NOT NULL DEFAULT 'New Tab', color TEXT NOT NULL DEFAULT '#888888', tabOrder INTEGER NOT NULL DEFAULT 0, isArchived INTEGER NOT NULL DEFAULT 0, workspaceID TEXT NOT NULL, updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP, isDeleted INTEGER DEFAULT 0);
   CREATE TABLE IF NOT EXISTS kanban_columns (id TEXT PRIMARY KEY, tabID TEXT NOT NULL, workspaceID TEXT NOT NULL, columnIndex INTEGER NOT NULL DEFAULT 0, updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP, isDeleted INTEGER DEFAULT 0);
-  CREATE TABLE IF NOT EXISTS lists (id TEXT PRIMARY KEY, name TEXT NOT NULL, category TEXT, color TEXT, direction TEXT, columnID TEXT NOT NULL, workspaceID TEXT NOT NULL, tabID TEXT, updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP, isDeleted INTEGER DEFAULT 0);
+  CREATE TABLE IF NOT EXISTS lists (id TEXT PRIMARY KEY, name TEXT NOT NULL, category TEXT, color TEXT, direction TEXT, listOrder INTEGER NOT NULL DEFAULT 0, columnID TEXT NOT NULL, workspaceID TEXT NOT NULL, tabID TEXT, updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP, isDeleted INTEGER DEFAULT 0);
   CREATE TABLE IF NOT EXISTS tasks (id TEXT PRIMARY KEY, title TEXT NOT NULL, description TEXT, isCompleted BOOLEAN, originalCategory TEXT, color TEXT, listID TEXT NOT NULL, taskOrder INTEGER NOT NULL DEFAULT 0, deadline TEXT, subtasks TEXT, updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP, isDeleted INTEGER DEFAULT 0);
   CREATE TABLE IF NOT EXISTS notes (id TEXT PRIMARY KEY, content TEXT NOT NULL DEFAULT '{}', workspaceID TEXT UNIQUE NOT NULL, updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP, isDeleted INTEGER DEFAULT 0);
   CREATE TABLE IF NOT EXISTS notation_groups (id TEXT PRIMARY KEY, name TEXT NOT NULL, color TEXT, workspaceID TEXT NOT NULL, groupOrder INTEGER NOT NULL DEFAULT 0, updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP, isDeleted INTEGER DEFAULT 0);
@@ -185,7 +185,15 @@ export class SyncManager {
         await this._dbReadyPromise;
         await this._execWorker('EXECUTE', { sql, params });
         this._notify();
-        if (this._online) this.sync(); 
+        this._schedulePush();
+    }
+
+    _schedulePush() {
+        if (!this._online) return;
+        clearTimeout(this._pushDebounce);
+        this._pushDebounce = setTimeout(() => {
+            this.sync()
+        }, 300);
     }
 
     async runBatch(statements) {
@@ -376,8 +384,8 @@ export class SyncManager {
 
         if (serverChanges.lists?.length) {
             await this.runBatch(serverChanges.lists.map(l => ({
-                sql: `INSERT INTO lists (id, name, category, color, direction, columnID, workspaceID, tabID, updatedAt, isDeleted) VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, category=excluded.category, color=excluded.color, direction=excluded.direction, columnID=excluded.columnID, workspaceID=excluded.workspaceID, tabID=excluded.tabID, updatedAt=excluded.updatedAt, isDeleted=excluded.isDeleted WHERE excluded.updatedAt > lists.updatedAt`,
-                params: [l.id, l.name, l.category, l.color, l.direction, l.columnID, l.workspaceID, l.tabID, l.updatedAt, l.isDeleted],
+                sql: `INSERT INTO lists (id, name, category, color, direction, listOrder, columnID, workspaceID, tabID, updatedAt, isDeleted) VALUES (?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, category=excluded.category, color=excluded.color, direction=excluded.direction, listOrder=excluded.listOrder, columnID=excluded.columnID, workspaceID=excluded.workspaceID, tabID=excluded.tabID, updatedAt=excluded.updatedAt, isDeleted=excluded.isDeleted WHERE excluded.updatedAt > lists.updatedAt`,
+                params: [l.id, l.name, l.category, l.color, l.direction, l.listOrder ?? 0, l.columnID, l.workspaceID, l.tabID, l.updatedAt, l.isDeleted],
             })));
         }
 
@@ -397,8 +405,8 @@ export class SyncManager {
 
         if (serverChanges.notation_groups?.length) {
             await this.runBatch(serverChanges.notation_groups.map(g => ({
-                sql: `INSERT INTO notation_groups (id, name, workspaceID, groupOrder, updatedAt, isDeleted) VALUES (?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, workspaceID=excluded.workspaceID, groupOrder=excluded.groupOrder, updatedAt=excluded.updatedAt, isDeleted=excluded.isDeleted WHERE excluded.updatedAt > notation_groups.updatedAt`,
-                params: [g.id, g.name, g.workspaceID, g.groupOrder, g.updatedAt, g.isDeleted],
+                sql: `INSERT INTO notation_groups (id, name, color, workspaceID, groupOrder, updatedAt, isDeleted) VALUES (?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, color=excluded.color, workspaceID=excluded.workspaceID, groupOrder=excluded.groupOrder, updatedAt=excluded.updatedAt, isDeleted=excluded.isDeleted WHERE excluded.updatedAt > notation_groups.updatedAt`,
+                params: [g.id, g.name, g.color, g.workspaceID, g.groupOrder, g.updatedAt, g.isDeleted],
             })));
         }
 

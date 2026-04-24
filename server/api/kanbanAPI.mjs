@@ -132,7 +132,7 @@ export default function createKanbanRouter(db) {
         if (columnIds.length > 0) {
             const colPlaceholders = columnIds.map(() => '?').join(',');
             lists = await db.all(
-                `SELECT * FROM lists WHERE columnID IN (${colPlaceholders}) AND isDeleted = 0`,
+                `SELECT * FROM lists WHERE columnID IN (${colPlaceholders}) AND isDeleted = 0 ORDER BY listOrder ASC`,
                 columnIds
             );
 
@@ -150,15 +150,28 @@ export default function createKanbanRouter(db) {
     }));
 
     router.post('/lists', catchAsync(async (req, res) => {
-        const { id, name, category, color, direction, columnID, workspaceID, tabID } = req.body;
+        const { id, name, category, color, direction, listOrder, columnID, workspaceID, tabID } = req.body;
 
         await db.run(
-            'INSERT INTO lists (id, name, category, color, direction, columnID, workspaceID, tabID) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-            [id, name ?? 'New List', category ?? '', color ?? '', direction ?? 'vertical', columnID, workspaceID, tabID ?? null]
+            'INSERT INTO lists (id, name, category, color, direction, listOrder, columnID, workspaceID, tabID) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [id, name ?? 'New List', category ?? '', color ?? '', direction ?? 'vertical', listOrder ?? 0, columnID, workspaceID, tabID ?? null]
         );
 
         const list = await db.get('SELECT * FROM lists WHERE id = ?', [id]);
         res.status(201).json({ list });
+    }));
+
+    router.put('/lists/reorder', catchAsync(async (req, res) => {
+        const { updates } = req.body;
+
+        await Promise.all(updates.map(({ id, listOrder }) =>
+            db.run(
+                'UPDATE lists SET listOrder = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?',
+                [listOrder, id]
+            )
+        ));
+
+        res.json({ message: 'Lists reordered successfully' });
     }));
 
     router.put('/lists/:listId', catchAsync(async (req, res) => {

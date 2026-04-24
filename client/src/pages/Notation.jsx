@@ -55,7 +55,20 @@ export default function Notation() {
                     user: {
                         name: user?.email || 'Anonymous',
                         color: '#c8502a'
-                    }
+                    },
+                    render(user) {
+                        const cursor = document.createElement('span');
+                        cursor.classList.add('collab-cursor');
+                        cursor.style.borderColor = user.color;
+
+                        const label = document.createElement('span');
+                        label.classList.add('collab-cursor__label');
+                        label.style.background = user.color;
+                        label.textContent = user.name;
+
+                        cursor.appendChild(label);
+                        return cursor;
+                    },
                 })
             ] : [])
         ],

@@ -39,24 +39,24 @@ export function useNotationSidebar(workspaceID) {
         return unsub;
     }, [sm, workspaceID]);
 
-    async function createGroup(name) {
-        const id = crypto.randomUUID();
-        await sm.execute(
-            'INSERT INTO notation_groups (id, name, workspaceID, grouporder) VALUES (?, ?, ?, ?)',
-            [id, name, workspaceID, groups.length]
-        );
-        await sm.syncNow();
-    }
-
     async function createPage(title = 'Untitled', groupID = null) {
         const id = crypto.randomUUID();
         const pagesInGroup = pages.filter(p => p.groupID === groupID);
         await sm.execute(
-            'INSERT INTO notation_pages (id, title, workspaceID, groupID, pageOrder) VALUES (?, ?, ?, ?, ?)',
+            `INSERT INTO notation_pages (id, title, workspaceID, groupID, pageOrder) VALUES (?, ?, ?, ?, ?)`,
             [id, title, workspaceID, groupID, pagesInGroup.length]
         );
-        await sm.syncNow();
+        await sm.sync();
         return id;
+    }
+
+    async function createGroup(name) {
+        const id = crypto.randomUUID();
+        await sm.execute(
+            `INSERT INTO notation_groups (id, name, workspaceID, groupOrder) VALUES (?, ?, ?, ?)`,
+            [id, name, workspaceID, groups.length]
+        );
+        await sm.sync();
     }
 
     async function renameGroup(id, name) {

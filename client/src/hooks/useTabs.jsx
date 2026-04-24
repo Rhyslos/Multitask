@@ -9,16 +9,14 @@ export function useTabs(workspaceID) {
     const [activeTabId, setActiveTabId] = useState(null);
     const [loading, setLoading] = useState(true);
 
+    // In useTabs.jsx
     const loadLocal = useCallback(async () => {
         if (!sm || !workspaceID) return;
-        
-        console.log(`[1. useTabs] Querying local DB for workspace: ${workspaceID}`);
-        
+
         const wsCheck = await sm.query('SELECT id FROM workspaces WHERE id = ?', [workspaceID]);
         if (wsCheck.length === 0) {
-            setTabs([]);
             setLoading(false);
-            return;
+            return; // workspace not known yet, wait for sync
         }
 
         let fetched = await sm.query(
@@ -26,16 +24,28 @@ export function useTabs(workspaceID) {
             [workspaceID]
         );
 
-        console.log(`[2. useTabs] Local DB returned ${fetched.length} tabs.`);
-
+        // hook functions
         if (fetched.length === 0) {
-            const id = crypto.randomUUID();
-            console.warn(`[3. useTabs] 0 tabs found! Creating default 'Main' tab with ID: ${id}`);
+            const owned = await sm.query(
+                'SELECT id FROM workspaces WHERE id = ? AND userID = ?',
+                [workspaceID, sm._userId]  
+            );
+
+            if (owned.length === 0) {
+                setLoading(false);
+                return;
+            }
+
+            // ID generation functions
+            const id = `default-tab-${workspaceID}`;
             
+            // db insertion functions
             await sm.execute(
                 `INSERT OR IGNORE INTO kanban_tabs (id, name, color, tabOrder, isArchived, workspaceID) VALUES (?,?,?,?,?,?)`,
                 [id, 'Main', '#6c8ebf', 0, 0, workspaceID]
             );
+            
+            // data retrieval functions
             fetched = await sm.query(
                 'SELECT * FROM kanban_tabs WHERE workspaceID = ? AND isArchived = 0 AND isDeleted = 0 ORDER BY tabOrder ASC',
                 [workspaceID]
@@ -43,12 +53,7 @@ export function useTabs(workspaceID) {
         }
 
         setTabs(fetched);
-        
-        setActiveTabId(currentActiveId => {
-            if (fetched.length > 0 && !currentActiveId) return fetched[0].id;
-            return currentActiveId;
-        });
-        
+        setActiveTabId(current => (!current && fetched.length > 0 ? fetched[0].id : current));
         setLoading(false);
     }, [sm, workspaceID]);
 

@@ -138,15 +138,16 @@ async function applyClientChanges(db, changes) {
         for (const l of changes.lists) {
             try {
                 await db.run(
-                    `INSERT INTO lists (id, name, category, color, direction, columnID, workspaceID, tabID, updatedAt, isDeleted) 
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
+                    `INSERT INTO lists (id, name, category, color, direction, listOrder, columnID, workspaceID, tabID, updatedAt, isDeleted) 
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
                      ON CONFLICT(id) DO UPDATE SET 
-                     name=excluded.name, category=excluded.category, color=excluded.color, direction=excluded.direction, columnID=excluded.columnID, tabID=excluded.tabID, updatedAt=excluded.updatedAt, isDeleted=excluded.isDeleted 
+                     name=excluded.name, category=excluded.category, color=excluded.color, direction=excluded.direction, listOrder=excluded.listOrder, columnID=excluded.columnID, tabID=excluded.tabID, updatedAt=excluded.updatedAt, isDeleted=excluded.isDeleted 
                      WHERE excluded.updatedAt > lists.updatedAt`,
-                    [l.id, l.name, l.category, l.color, l.direction, l.columnID, l.workspaceID, l.tabID, l.updatedAt, l.isDeleted]
+                    [l.id, l.name, l.category, l.color, l.direction, l.listOrder ?? 0, l.columnID, l.workspaceID, l.tabID, l.updatedAt, l.isDeleted]
                 );
             } catch (e) {
-                console.warn(`[SYNC] List ${l.id} skipped: Parent missing`);
+                // error handling functions
+                console.warn(`[SYNC] List ${l.id} skipped:`, e.message);
             }
         }
     }
@@ -165,7 +166,7 @@ async function applyClientChanges(db, changes) {
                     [t.id, t.title, t.description, t.isCompleted ? 1 : 0, t.originalCategory, t.color, t.listID, t.taskOrder, t.deadline, subtasksStr, t.updatedAt, t.isDeleted]
                 );
             } catch (e) {
-                console.warn(`[SYNC] Task ${t.id} skipped: Parent missing`);
+                console.warn(`[SYNC] Task ${t.id} skipped:`, e.message);
             }
         }
     }
@@ -182,6 +183,40 @@ async function applyClientChanges(db, changes) {
                     [n.id, n.content, n.workspaceID, n.updatedAt, n.isDeleted]
                 );
             } catch (e) {}
+        }
+    }
+
+    if (changes.notation_groups) {
+        for (const g of changes.notation_groups) {
+            try {
+                await db.run(
+                    `INSERT INTO notation_groups (id, name, color, workspaceID, groupOrder, updatedAt, isDeleted)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                    name=excluded.name, color=excluded.color, groupOrder=excluded.groupOrder, updatedAt=excluded.updatedAt, isDeleted=excluded.isDeleted
+                    WHERE excluded.updatedAt > notation_groups.updatedAt`,
+                    [g.id, g.name, g.color, g.workspaceID, g.groupOrder, g.updatedAt, g.isDeleted]
+                );
+            } catch (e) {
+                console.warn(`[SYNC] notation_group ${g.id} skipped:`, e.message);
+            }
+        }
+    }
+
+    if (changes.notation_pages) {
+        for (const p of changes.notation_pages) {
+            try {
+                await db.run(
+                    `INSERT INTO notation_pages (id, title, workspaceID, groupID, pageOrder, updatedAt, isDeleted)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                    title=excluded.title, groupID=excluded.groupID, pageOrder=excluded.pageOrder, updatedAt=excluded.updatedAt, isDeleted=excluded.isDeleted
+                    WHERE excluded.updatedAt > notation_pages.updatedAt`,
+                    [p.id, p.title, p.workspaceID, p.groupID, p.pageOrder, p.updatedAt, p.isDeleted]
+                );
+            } catch (e) {
+                console.warn(`[SYNC] notation_page ${p.id} skipped:`, e.message);
+            }
         }
     }
 }
@@ -228,6 +263,16 @@ async function getServerChanges(db, userID, lastSync) {
         wsParams
     );
 
+    const notation_groups = await db.all(
+        `SELECT * FROM notation_groups WHERE workspaceID IN (${wsQuery}) AND updatedAt > ?`,
+        wsParams
+    );
+
+    const notation_pages = await db.all(
+        `SELECT * FROM notation_pages WHERE workspaceID IN (${wsQuery}) AND updatedAt > ?`,
+        wsParams
+    );
+
     const listQuery = `SELECT id FROM lists WHERE workspaceID IN (${wsQuery})`;
     const tasks = await db.all(
         `SELECT * FROM tasks WHERE listID IN (${listQuery}) AND updatedAt > ?`,
@@ -250,5 +295,5 @@ async function getServerChanges(db, userID, lastSync) {
         AND (u.updatedAt > ? OR wm.updatedAt > ?)
     `, [userID, userID, since, since]);
 
-    return { users, workspace_members, workspaces, categories, kanban_tabs, kanban_columns, lists, tasks, notes };
+    return { users, workspace_members, workspaces, categories, kanban_tabs, kanban_columns, lists, tasks, notes, notation_groups, notation_pages };
 }

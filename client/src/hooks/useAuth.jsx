@@ -28,6 +28,16 @@ export function AuthProvider({ children }) {
         }
     }, [user?.id]);
 
+    useEffect(() => {
+        function handleForceLogout(){
+            logout();
+            window.location.href = '/';
+        }
+
+        window.addEventListener('force_logout', handleForceLogout);
+        return () => window.removeEventListener('force_logout', handleForceLogout);
+    }, []);
+
     async function login(email, password) {
         try {
             const res = await fetch(`${API}/users/login`, {

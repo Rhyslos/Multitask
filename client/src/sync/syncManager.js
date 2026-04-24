@@ -227,10 +227,6 @@ export class SyncManager {
                     if (changedRows.length > 0) pushPayload[table] = changedRows;
                 }
 
-                if (pushPayload.kanban_tabs) {
-                    console.warn(`[5. SyncManager] Pushing ${pushPayload.kanban_tabs.length} tabs TO the server!`, pushPayload.kanban_tabs);
-                }
-
                 const flightTime = new Date().toISOString().replace('T', ' ').slice(0, 19);
 
                 const r = await fetch(`${API}/sync`, {
@@ -239,6 +235,11 @@ export class SyncManager {
                     body: JSON.stringify({ userID: this._userId, lastSync: safeSyncTime, clientChanges: pushPayload }),
                     signal: AbortSignal.timeout(5000),
                 });
+
+                if (r.status === 401) {
+                    window.dispatchEvent(new CustomEvent('force_logout'));
+                    throw new Error('User deleted from server');
+                }
 
                 if (!r.ok) throw new Error(`Sync failed: ${r.status}`);
 
@@ -288,7 +289,17 @@ export class SyncManager {
                 signal: AbortSignal.timeout(5000),
             });
 
-            if (!r.ok) throw new Error(`Sync failed: ${r.status}`);
+            if (r.status === 401) {
+                    window.dispatchEvent(new CustomEvent('force_logout'));
+                    throw new Error('User deleted from server');
+                }
+
+                if (r.status === 401) {
+                    window.dispatchEvent(new CustomEvent('force_logout'));
+                    throw new Error('User deleted from server');
+                }
+
+                if (!r.ok) throw new Error(`Sync failed: ${r.status}`);
 
             const serverChanges = await r.json();
             await this._mergeServerData(serverChanges);
@@ -325,9 +336,19 @@ export class SyncManager {
                     { signal: AbortSignal.timeout(5000) }
                 );
                 
+                // 1. Intercept the deleted user
+                if (r.status === 401) {
+                    window.dispatchEvent(new CustomEvent('force_logout'));
+                    throw new Error('User deleted from server');
+                }
+                
                 if (!r.ok) throw new Error(`syncNow failed: ${r.status}`);
 
                 const serverChanges = await r.json();
+                
+                // 2. Hard stop if payload is mangled/undefined
+                if (!serverChanges) return; 
+
                 await this._mergeServerData(serverChanges);
                 localStorage.setItem(syncKey, currentSyncTime);
                 this._setOnline(true);
@@ -339,8 +360,15 @@ export class SyncManager {
 
     async _mergeServerData(serverChanges) {
         console.log(`[4. SyncManager] Received server payload. Tabs included: ${serverChanges.kanban_tabs?.length || 0}`);
+        if(!serverChanges) return;
 
         if (serverChanges.users?.length) {
+            const activeUser = serverChanges.changes.users.find(u => u.id === this._user);
+            if(activeUser && activeUser.isDeleted === 1) {
+                window.dispatchEvent(new CustomEvent('force_logout'));
+                return;
+            }
+            
             await this.runBatch(serverChanges.users.map(u => ({
                 sql: `INSERT INTO users (id, email, displayName, firstName, lastName, countryIso, phoneNumber, gender, skillset, privacySettings, updatedAt, isDeleted) VALUES (?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET email=excluded.email, displayName=excluded.displayName, firstName=excluded.firstName, lastName=excluded.lastName, countryIso=excluded.countryIso, phoneNumber=excluded.phoneNumber, gender=excluded.gender, skillset=excluded.skillset, privacySettings=excluded.privacySettings, updatedAt=excluded.updatedAt, isDeleted=excluded.isDeleted WHERE excluded.updatedAt > users.updatedAt`,
                 params: [u.id, u.email, u.displayName, u.firstName, u.lastName, u.countryIso, u.phoneNumber, u.gender, u.skillset, u.privacySettings, u.updatedAt, u.isDeleted],

@@ -9,7 +9,15 @@ export default function createSyncRouter(db) {
 
     router.get('/', catchAsync(async (req, res) => {
         const { userID, lastSync } = req.query;
+        
+        // validation functions
         if (!userID) return res.status(400).json({ error: 'userID required' });
+
+        const userCheck = await db.get('SELECT id FROM users WHERE id = ?', [userID]);
+        if (!userCheck) {
+            return res.status(401).json({ error: 'User missing from server' });
+        }
+
         const since = lastSync || '1970-01-01 00:00:00';
         const serverChanges = await getServerChanges(db, userID, since);
         return res.json(serverChanges);
@@ -17,7 +25,14 @@ export default function createSyncRouter(db) {
 
     router.post('/', catchAsync(async (req, res) => {
         const { userID, lastSync, clientChanges } = req.body;
+        
+        // validation functions
         if (!userID) return res.status(400).json({ error: 'userID required' });
+
+        const userCheck = await db.get('SELECT id FROM users WHERE id = ?', [userID]);
+        if (!userCheck) {
+            return res.status(401).json({ error: 'User missing from server' });
+        }
 
         if (clientChanges?.kanban_tabs) {
             console.log(`[6. Server] Received tab push from user ${userID}:`, clientChanges.kanban_tabs);

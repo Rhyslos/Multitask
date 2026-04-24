@@ -363,7 +363,7 @@ export class SyncManager {
         if(!serverChanges) return;
 
         if (serverChanges.users?.length) {
-            const activeUser = serverChanges.changes.users.find(u => u.id === this._user);
+            const activeUser = serverChanges.users.find(u => u.id === this._userId);
             if(activeUser && activeUser.isDeleted === 1) {
                 window.dispatchEvent(new CustomEvent('force_logout'));
                 return;

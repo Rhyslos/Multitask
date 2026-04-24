@@ -28,6 +28,15 @@ export function notifyUser(email, type, payload) {
     }
 }
 
+// interval functions
+setInterval(() => {
+    clients.forEach((userStreams) => {
+        userStreams.forEach(clientRes => {
+            clientRes.write(':\n\n'); 
+        });
+    });
+}, 30000);
+
 // router configuration
 export default function createNetworkingRouter() {
     const router = Router();

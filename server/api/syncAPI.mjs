@@ -138,15 +138,16 @@ async function applyClientChanges(db, changes) {
         for (const l of changes.lists) {
             try {
                 await db.run(
-                    `INSERT INTO lists (id, name, category, color, direction, columnID, workspaceID, tabID, updatedAt, isDeleted) 
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
+                    `INSERT INTO lists (id, name, category, color, direction, listOrder, columnID, workspaceID, tabID, updatedAt, isDeleted) 
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
                      ON CONFLICT(id) DO UPDATE SET 
-                     name=excluded.name, category=excluded.category, color=excluded.color, direction=excluded.direction, columnID=excluded.columnID, tabID=excluded.tabID, updatedAt=excluded.updatedAt, isDeleted=excluded.isDeleted 
+                     name=excluded.name, category=excluded.category, color=excluded.color, direction=excluded.direction, listOrder=excluded.listOrder, columnID=excluded.columnID, tabID=excluded.tabID, updatedAt=excluded.updatedAt, isDeleted=excluded.isDeleted 
                      WHERE excluded.updatedAt > lists.updatedAt`,
-                    [l.id, l.name, l.category, l.color, l.direction, l.columnID, l.workspaceID, l.tabID, l.updatedAt, l.isDeleted]
+                    [l.id, l.name, l.category, l.color, l.direction, l.listOrder ?? 0, l.columnID, l.workspaceID, l.tabID, l.updatedAt, l.isDeleted]
                 );
             } catch (e) {
-                console.warn(`[SYNC] List ${l.id} skipped: Parent missing`);
+                // error handling functions
+                console.warn(`[SYNC] List ${l.id} skipped:`, e.message);
             }
         }
     }
@@ -165,7 +166,7 @@ async function applyClientChanges(db, changes) {
                     [t.id, t.title, t.description, t.isCompleted ? 1 : 0, t.originalCategory, t.color, t.listID, t.taskOrder, t.deadline, subtasksStr, t.updatedAt, t.isDeleted]
                 );
             } catch (e) {
-                console.warn(`[SYNC] Task ${t.id} skipped: Parent missing`);
+                console.warn(`[SYNC] Task ${t.id} skipped:`, e.message);
             }
         }
     }

@@ -105,6 +105,7 @@ export async function initializeDatabase() {
         category TEXT,
         color TEXT,
         direction TEXT,
+        listOrder INTEGER NOT NULL DEFAULT 0,
         columnID TEXT NOT NULL,
         workspaceID TEXT NOT NULL,
         tabID TEXT,

@@ -8,7 +8,6 @@ import { useWorkspaces } from "../hooks/useWorkspaces";
 import { useAuth } from "../hooks/useAuth";
 import { useDragDrop } from "../hooks/useDragDrop";
 import { useFlipAnimation } from "../hooks/useFlipAnimation";
-import Navbar from "../components/Navbar";
 import KanbanSubbar from "../components/subbar/KanbanSubbar";
 import KanbanColumn from "../components/kanban/KanbanColumn";
 import KanbanTask from "../components/kanban/KanbanTask";
@@ -69,14 +68,20 @@ export default function Kanban() {
         tasks,
         onReorder: reorderTasks,
         onGhostDrop: async (key, task) => {
-
             const isNewColumn = key === "new-column";
-            const targetIndex = isNewColumn
-                ? columns.length
-                : parseInt(key.replace("ghost-col-", ""));
 
-            const columnID = await addColumn(targetIndex);
-            if (!columnID) return;
+            let columnID;
+
+            if (isNewColumn) {
+                columnID = await addColumn(columns.length);
+                if (!columnID) return;
+            } else {
+                // "ghost-col-{columnIndex}" → find the existing column
+                const targetIndex = parseInt(key.replace("ghost-col-", ""));
+                const existingColumn = columns.find(c => c.columnIndex === targetIndex);
+                columnID = existingColumn?.id;
+                if (!columnID) return;
+            }
 
             const listID = await addList(columnID, workspaceID, activeTabId);
             if (!listID) return;
@@ -149,7 +154,6 @@ export default function Kanban() {
 
     return (
         <div className="kanban-root">
-            <Navbar />
             <KanbanSubbar
                 tabs={tabs}
                 activeTabId={activeTabId}

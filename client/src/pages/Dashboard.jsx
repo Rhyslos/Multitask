@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useWorkspaces } from '../hooks/useWorkspaces';
 import { useAnimatedRemoval } from '../hooks/useAnimatedRemoval';
-import Navbar from '../components/Navbar';
 import DefaultSubbar from '../components/subbar/DefaultSubbar';
 import CategoryFilter from '../components/CategoryFilter';
 import CreateWorkspaceModal from '../components/workspace/CreateWorkspaceModal';
@@ -41,7 +40,6 @@ export default function Dashboard() {
 
     return (
         <div className="dashboard-root">
-            <Navbar />
             <DefaultSubbar />
             <main className="dashboard-main">
                 <div className="grid-root">

@@ -26,36 +26,59 @@ export function SyncProvider({ children }) {
     }, []);
 
     useEffect(() => {
-        if (!userEmail || !sm) return;
+        if (!userEmail || !sm || !ready) return;
 
-        if (esRef.current) esRef.current.close();
+        let retryTimeout = null;
+        let retryDelay = 1000;
+        let isCancelled = false;
 
-        const es = new EventSource(`${API}/network/stream/${userEmail}`);
-        esRef.current = es;
+        const connect = () => {
+            if (isCancelled) return;
 
-        // event listeners
-        es.onmessage = (event) => {
-            const data = JSON.parse(event.data);
+            if (esRef.current) esRef.current.close();
 
-            if (data.type === 'kanban_updated') {
-                sm.syncNow();
-            }
-            if (data.type === 'invites_updated') {
-                window.dispatchEvent(new CustomEvent('invites_updated', { detail: data }));
-            }
-            if (data.type === 'presence_updated') {
-                window.dispatchEvent(new CustomEvent('presence_updated', { detail: data }));
-            }
+            const es = new EventSource(`${API}/network/stream/${userEmail}`);
+            esRef.current = es;
+
+            es.onopen = () => {
+                retryDelay = 1000;
+            };
+
+            es.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+
+                if (data.type === 'kanban_updated') sm.syncNow();
+                if (data.type === 'invites_updated')
+                    window.dispatchEvent(new CustomEvent('invites_updated', { detail: data }));
+                if (data.type === 'presence_updated')
+                    window.dispatchEvent(new CustomEvent('presence_updated', { detail: data }));
+            };
+
+            es.onerror = () => {
+                es.close();
+                esRef.current = null;
+
+                if (!isCancelled) {
+                    retryTimeout = setTimeout(() => {
+                        retryDelay = Math.min(retryDelay * 2, 30000);
+                        connect();
+                    }, retryDelay);
+                }
+            };
         };
 
-        es.onerror = () => {
-        };
+        const initTimer = setTimeout(connect, 100); // ← only change
 
         return () => {
-            es.close();
-            esRef.current = null;
+            isCancelled = true;
+            clearTimeout(initTimer);        // ← and clear it on cleanup
+            clearTimeout(retryTimeout);
+            if (esRef.current) {
+                esRef.current.close();
+                esRef.current = null;
+            }
         };
-    }, [userEmail, sm]);
+    }, [userEmail, sm, ready]); // ← added ready
 
     // return values
     return (

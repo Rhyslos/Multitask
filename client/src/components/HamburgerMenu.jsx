@@ -29,7 +29,7 @@ export default function HamburgerMenu({ open, onClose }) {
                         Profile
                     </button>
 
-                    <button className="hamburger-item">   
+                    <button className="hamburger-item" onClick={() => navTo('/settings')}>   
                         Settings
                     </button>
 

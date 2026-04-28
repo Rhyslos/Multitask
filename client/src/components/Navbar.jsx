@@ -1,9 +1,8 @@
 import { useState } from 'react';
-import { useNavigate, useParams, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, matchPath } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useWorkspacePresence } from '../hooks/useWorkspacePresence'; 
 import HamburgerMenu from './HamburgerMenu';
-// Import the new modal
 import UserProfileModal from './UserProfileModal'; 
 import { appName } from '../App';
 
@@ -27,19 +26,23 @@ function getAvatarColor(member) {
     return '#' + '00000'.substring(0, 6 - c.length) + c;
 }
 
+// component
 export default function Navbar() {
     const { user } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
-    const { workspaceID } = useParams();
+    
+    // routing states
+    const match = matchPath({ path: "/workspace/:workspaceID/*" }, location.pathname);
+    const workspaceID = match?.params?.workspaceID;
     
     const [menuOpen, setMenuOpen] = useState(false);
-    // New state to track the clicked member
     const [selectedMember, setSelectedMember] = useState(null); 
 
     const inWorkspace = !!workspaceID;
     const { members } = useWorkspacePresence(workspaceID);
 
+    // navigation handlers
     function navTo(page) {
         if (workspaceID) navigate(`/workspace/${workspaceID}/${page}`);
     }
@@ -80,16 +83,16 @@ export default function Navbar() {
                         </div>
 
                         <div className="navbar-presence">
-                            {members.map(member => (
+                            {members?.map(member => (
                                 <div 
                                     key={member.id} 
                                     className={`navbar-avatar ${member.isOnline ? 'online' : 'offline'}`}
                                     style={{ 
                                         backgroundColor: getAvatarColor(member),
-                                        cursor: 'pointer' // Added pointer to indicate it's clickable
+                                        cursor: 'pointer' 
                                     }}
                                     title={member.displayName || member.firstName || member.email}
-                                    onClick={() => setSelectedMember(member)} // Open modal on click
+                                    onClick={() => setSelectedMember(member)} 
                                 >
                                     {getAvatarLetter(member)}
                                 </div>
@@ -106,7 +109,6 @@ export default function Navbar() {
                 </div>
             </nav>
             
-            {/* Modals */}
             <HamburgerMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
             <UserProfileModal member={selectedMember} onClose={() => setSelectedMember(null)} />
         </>

@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
-import Navbar from '../components/Navbar';
 import 'flag-icons/css/flag-icons.min.css';
 import { COUNTRIES, GENDER_OPTIONS, formatPhoneNumber } from '../components/international/constants';
 
@@ -287,7 +286,6 @@ export default function UserProfile() {
 
     return (
         <>
-            <Navbar />
             <div className="profile-root">
                 <div className="profile-header">
                     <h1 className="profile-title">Profile Settings</h1>

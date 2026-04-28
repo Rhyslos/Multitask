@@ -8,7 +8,6 @@ import { WebsocketProvider } from 'y-websocket';
 
 import { useAuth } from '../hooks/useAuth';
 import { editorExtensions } from '../components/notation/EditorExtensions';
-import Navbar from '../components/Navbar';
 import NotationSubbar from '../components/subbar/NotationSubbar';
 import NotationSidebar from '../components/notation/NotationSidebar';
 
@@ -76,7 +75,6 @@ export default function Notation() {
 
     return (
         <div className="notation-root">
-            <Navbar />
             <NotationSubbar editor={editor} saved={status === 'connected'} />
 
             <div className="notation-body">

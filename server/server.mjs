@@ -33,6 +33,11 @@ export class KanbanServer {
         this.app.use('/api/sync', createSyncRouter(this.db));
         this.app.use('/api/invites', createInvitesRouter(this.db));
         this.app.use('/api/network', createNetworkingRouter());
+
+        this.app.use(cors({
+            origin: ['http://localhost:5173', 'http://localhost:5174'],
+            exposedHeaders: ['Cache-Control', 'Content-Type'],
+        }));
     }
 
     start() {

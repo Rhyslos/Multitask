@@ -35,7 +35,7 @@ setInterval(() => {
             clientRes.write(':\n\n'); 
         });
     });
-}, 30000);
+}, 15000);
 
 // router configuration
 export default function createNetworkingRouter() {
@@ -43,19 +43,19 @@ export default function createNetworkingRouter() {
 
     // sse routes
     router.get('/stream/:email', (req, res) => {
-        const { email } = req.params;
+    const { email } = req.params;
 
-        res.setHeader('Content-Type', 'text/event-stream');
-        res.setHeader('Cache-Control', 'no-cache');
-        res.setHeader('Connection', 'keep-alive');
-        res.flushHeaders();
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders();
 
-        if (!clients.has(email)) {
-            clients.set(email, new Set());
-        }
-        clients.get(email).add(res);
+    if (!clients.has(email)) clients.set(email, new Set());
+    clients.get(email).add(res);
 
-        res.write(`data: ${JSON.stringify({ type: 'connected' })}\n\n`);
+    res.write('retry: 3000\n\n');  
+    res.write(`data: ${JSON.stringify({ type: 'connected' })}\n\n`);
 
         // event listeners
         req.on('close', () => {

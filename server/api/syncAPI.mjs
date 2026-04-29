@@ -1,7 +1,7 @@
 // router functions
 import { Router } from 'express';
 import { catchAsync } from './apiUtils.mjs';
-import { notifyUser } from '../modules/networking.mjs';
+import { notifyEmails } from '../modules/networking.mjs';
 import crypto from 'crypto';
 
 export default function createSyncRouter(db) {
@@ -18,14 +18,17 @@ export default function createSyncRouter(db) {
             return res.status(401).json({ error: 'User missing from server' });
         }
 
-        const since = lastSync || '1970-01-01 00:00:00';
+        // ms-precision floor matches the format used everywhere else.
+        // String comparison vs '1970-01-01 00:00:00' is identical for any real
+        // timestamp; standardizing the format prevents confusion only.
+        const since = lastSync || '1970-01-01 00:00:00.000';
         const serverChanges = await getServerChanges(db, userID, since);
         return res.json(serverChanges);
     }));
 
     router.post('/', catchAsync(async (req, res) => {
-        const { userID, lastSync, clientChanges } = req.body;
-        
+        const { userID, lastSync, clientChanges, clientId } = req.body;
+
         // validation functions
         if (!userID) return res.status(400).json({ error: 'userID required' });
 
@@ -43,18 +46,28 @@ export default function createSyncRouter(db) {
         if (hasIncomingChanges) {
             await applyClientChanges(db, clientChanges);
 
+            // Broadcast to every workspace member who shares a workspace with
+            // the writer — INCLUDING the writer themselves. The writer's other
+            // tabs / devices need this echo to update; the originating tab
+            // suppresses its own echo by checking originClientId in the SSE
+            // payload against its SyncManager._clientId.
+            //
+            // Best-effort: if SQL or notify throws we log and move on. The
+            // affected client will catch up on its next push or reconnect.
             try {
-                const sharedUsers = await db.all(`
-                    SELECT DISTINCT u.email 
+                const recipients = await db.all(`
+                    SELECT DISTINCT u.email
                     FROM workspace_members wm1
                     JOIN workspace_members wm2 ON wm1.workspaceID = wm2.workspaceID
                     JOIN users u ON wm2.userID = u.id
-                    WHERE wm1.userID = ? AND u.id != ?
-                `, [userID, userID]);
+                    WHERE wm1.userID = ?
+                `, [userID]);
 
-                sharedUsers.forEach(user => {
-                    notifyUser(user.email, 'kanban_updated', { trigger: 'sync' });
-                });
+                notifyEmails(
+                    recipients.map(r => r.email),
+                    'kanban_updated',
+                    { trigger: 'sync', originClientId: clientId ?? null }
+                );
             } catch (broadcastError) {
                 console.error('[SYNC] Broadcast failed:', broadcastError.message);
             }
@@ -68,176 +81,63 @@ export default function createSyncRouter(db) {
 }
 
 // database functions
+const ALLOWED_TABLES = [
+    'categories', 'workspaces', 'workspace_members', 'kanban_tabs', 
+    'kanban_columns', 'lists', 'tasks', 'notes', 'notation_groups', 'notation_pages'
+];
+
 async function applyClientChanges(db, changes) {
-    if (changes.categories) {
-        for (const c of changes.categories) {
-            try {
-                await db.run(
-                    `INSERT INTO categories (id, name, color, userID, updatedAt, isDeleted) 
-                     VALUES (?, ?, ?, ?, ?, ?) 
-                     ON CONFLICT(id) DO UPDATE SET 
-                     name=excluded.name, color=excluded.color, updatedAt=excluded.updatedAt, isDeleted=excluded.isDeleted 
-                     WHERE excluded.updatedAt > categories.updatedAt`,
-                    [c.id, c.name, c.color, c.userID, c.updatedAt, c.isDeleted]
-                );
-            } catch (e) {}
-        }
-    }
+    for (const [tableName, rows] of Object.entries(changes)) {
+        if (!ALLOWED_TABLES.includes(tableName) || !Array.isArray(rows) || rows.length === 0) continue;
 
-    if (changes.workspaces) {
-        for (const w of changes.workspaces) {
-            try {
-                await db.run(
-                    `INSERT INTO workspaces (id, name, userID, categoryID, createdAt, updatedAt, isDeleted) 
-                     VALUES (?, ?, ?, ?, ?, ?, ?) 
-                     ON CONFLICT(id) DO UPDATE SET 
-                     name=excluded.name, categoryID=excluded.categoryID, updatedAt=excluded.updatedAt, isDeleted=excluded.isDeleted 
-                     WHERE excluded.updatedAt > workspaces.updatedAt`,
-                    [w.id, w.name, w.userID, w.categoryID, w.createdAt, w.updatedAt, w.isDeleted]
+        const columns = Object.keys(rows[0]);
+        const placeholders = columns.map(() => '?').join(', ');
+        const updateSet = columns.map(col => `${col}=excluded.${col}`).join(', ');
+
+        const sql = `
+            INSERT INTO ${tableName} (${columns.join(', ')}) 
+            VALUES (${placeholders}) 
+            ON CONFLICT(id) DO UPDATE SET 
+            ${updateSet} 
+            WHERE excluded.updatedAt > ${tableName}.updatedAt
+        `;
+
+        for (const row of rows) {
+            // Defense-in-depth: every synced row MUST carry a client-supplied
+            // updatedAt. The schema's STRFTIME default would still produce a
+            // valid value if we let the row through, but doing so means the
+            // server is fabricating a timestamp for a client-originated write —
+            // breaking last-write-wins (the row sorts as if it was written
+            // server-side, not when the user actually edited). Skip + log so
+            // the offending client surfaces in the logs.
+            if (row.updatedAt == null) {
+                console.error(
+                    `[SYNC] Refusing row in ${tableName} (${row.id}): missing updatedAt. ` +
+                    `This indicates a client-side bug — every write to a synced table must set updatedAt.`
                 );
-            } catch (e) {
-                // Now you will actually see WHY a workspace failed to save!
-                console.error(`[SYNC ERROR] Failed to insert workspace ${w.id}:`, e.message);
+                continue;
             }
-        }
-    }
 
-    if (changes.workspace_members) {
-        for (const wm of changes.workspace_members) {
             try {
-                await db.run(
-                    `INSERT INTO workspace_members (id, workspaceID, userID, role, updatedAt, isDeleted) 
-                     VALUES (?, ?, ?, ?, ?, ?) 
-                     ON CONFLICT(id) DO UPDATE SET 
-                     workspaceID=excluded.workspaceID, userID=excluded.userID, role=excluded.role, updatedAt=excluded.updatedAt, isDeleted=excluded.isDeleted 
-                     WHERE excluded.updatedAt > workspace_members.updatedAt`,
-                    [wm.id, wm.workspaceID, wm.userID, wm.role, wm.updatedAt, wm.isDeleted]
-                );
-            } catch (e) {}
-        }
-    }
+                const values = columns.map(col => {
+                    // parsing functions
+                    if (tableName === 'tasks' && col === 'subtasks' && typeof row[col] !== 'string') {
+                        return row[col] ? JSON.stringify(row[col]) : null;
+                    }
+                    return row[col];
+                });
 
-    if (changes.kanban_tabs) {
-        for (const t of changes.kanban_tabs) {
-            try {
-                await db.run(
-                    `INSERT INTO kanban_tabs (id, name, color, tabOrder, isArchived, workspaceID, updatedAt, isDeleted) 
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?) 
-                     ON CONFLICT(id) DO UPDATE SET 
-                     name=excluded.name, color=excluded.color, tabOrder=excluded.tabOrder, isArchived=excluded.isArchived, updatedAt=excluded.updatedAt, isDeleted=excluded.isDeleted 
-                     WHERE excluded.updatedAt > kanban_tabs.updatedAt`,
-                    [t.id, t.name, t.color, t.tabOrder, t.isArchived, t.workspaceID, t.updatedAt, t.isDeleted]
-                );
-            } catch (e) {}
-        }
-    }
-
-    if (changes.kanban_columns) {
-        for (const c of changes.kanban_columns) {
-            try {
-                await db.run(
-                    `INSERT INTO kanban_columns (id, tabID, workspaceID, columnIndex, updatedAt, isDeleted) 
-                     VALUES (?, ?, ?, ?, ?, ?) 
-                     ON CONFLICT(id) DO UPDATE SET 
-                     tabID=excluded.tabID, columnIndex=excluded.columnIndex, updatedAt=excluded.updatedAt, isDeleted=excluded.isDeleted 
-                     WHERE excluded.updatedAt > kanban_columns.updatedAt`,
-                    [c.id, c.tabID, c.workspaceID, c.columnIndex, c.updatedAt, c.isDeleted]
-                );
-            } catch (e) {
-                console.warn(`[SYNC] Column ${c.id} skipped: Parent missing`);
-            }
-        }
-    }
-
-    if (changes.lists) {
-        for (const l of changes.lists) {
-            try {
-                await db.run(
-                    `INSERT INTO lists (id, name, category, color, direction, listOrder, columnID, workspaceID, tabID, updatedAt, isDeleted) 
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
-                     ON CONFLICT(id) DO UPDATE SET 
-                     name=excluded.name, category=excluded.category, color=excluded.color, direction=excluded.direction, listOrder=excluded.listOrder, columnID=excluded.columnID, tabID=excluded.tabID, updatedAt=excluded.updatedAt, isDeleted=excluded.isDeleted 
-                     WHERE excluded.updatedAt > lists.updatedAt`,
-                    [l.id, l.name, l.category, l.color, l.direction, l.listOrder ?? 0, l.columnID, l.workspaceID, l.tabID, l.updatedAt, l.isDeleted]
-                );
+                await db.run(sql, values);
             } catch (e) {
                 // error handling functions
-                console.warn(`[SYNC] List ${l.id} skipped:`, e.message);
-            }
-        }
-    }
-
-   if (changes.tasks) {
-        for (const t of changes.tasks) {
-            try {
-                const subtasksStr = t.subtasks ? (typeof t.subtasks === 'string' ? t.subtasks : JSON.stringify(t.subtasks)) : null;
-                
-                await db.run(
-                    `INSERT INTO tasks (id, title, description, isCompleted, originalCategory, color, listID, taskOrder, deadline, subtasks, updatedAt, isDeleted) 
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
-                     ON CONFLICT(id) DO UPDATE SET 
-                     title=excluded.title, description=excluded.description, isCompleted=excluded.isCompleted, originalCategory=excluded.originalCategory, color=excluded.color, listID=excluded.listID, taskOrder=excluded.taskOrder, deadline=excluded.deadline, subtasks=excluded.subtasks, updatedAt=excluded.updatedAt, isDeleted=excluded.isDeleted 
-                     WHERE excluded.updatedAt > tasks.updatedAt`,
-                    [t.id, t.title, t.description, t.isCompleted ? 1 : 0, t.originalCategory, t.color, t.listID, t.taskOrder, t.deadline, subtasksStr, t.updatedAt, t.isDeleted]
-                );
-            } catch (e) {
-                console.warn(`[SYNC] Task ${t.id} skipped:`, e.message);
-            }
-        }
-    }
-
-    if (changes.notes) {
-        for (const n of changes.notes) {
-            try {
-                await db.run(
-                    `INSERT INTO notes (id, content, workspaceID, updatedAt, isDeleted) 
-                     VALUES (?, ?, ?, ?, ?) 
-                     ON CONFLICT(id) DO UPDATE SET 
-                     content=excluded.content, updatedAt=excluded.updatedAt, isDeleted=excluded.isDeleted 
-                     WHERE excluded.updatedAt > notes.updatedAt`,
-                    [n.id, n.content, n.workspaceID, n.updatedAt, n.isDeleted]
-                );
-            } catch (e) {}
-        }
-    }
-
-    if (changes.notation_groups) {
-        for (const g of changes.notation_groups) {
-            try {
-                await db.run(
-                    `INSERT INTO notation_groups (id, name, color, workspaceID, groupOrder, updatedAt, isDeleted)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(id) DO UPDATE SET
-                    name=excluded.name, color=excluded.color, groupOrder=excluded.groupOrder, updatedAt=excluded.updatedAt, isDeleted=excluded.isDeleted
-                    WHERE excluded.updatedAt > notation_groups.updatedAt`,
-                    [g.id, g.name, g.color, g.workspaceID, g.groupOrder, g.updatedAt, g.isDeleted]
-                );
-            } catch (e) {
-                console.warn(`[SYNC] notation_group ${g.id} skipped:`, e.message);
-            }
-        }
-    }
-
-    if (changes.notation_pages) {
-        for (const p of changes.notation_pages) {
-            try {
-                await db.run(
-                    `INSERT INTO notation_pages (id, title, workspaceID, groupID, pageOrder, updatedAt, isDeleted)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(id) DO UPDATE SET
-                    title=excluded.title, groupID=excluded.groupID, pageOrder=excluded.pageOrder, updatedAt=excluded.updatedAt, isDeleted=excluded.isDeleted
-                    WHERE excluded.updatedAt > notation_pages.updatedAt`,
-                    [p.id, p.title, p.workspaceID, p.groupID, p.pageOrder, p.updatedAt, p.isDeleted]
-                );
-            } catch (e) {
-                console.warn(`[SYNC] notation_page ${p.id} skipped:`, e.message);
+                console.error(`[SYNC ERROR] Failed to insert into ${tableName} (${row.id}):`, e.message);
             }
         }
     }
 }
 
 async function getServerChanges(db, userID, lastSync) {
-    const since = lastSync || '1970-01-01 00:00:00';
+    const since = lastSync || '1970-01-01 00:00:00.000';
 
     const workspaces = await db.all(`
         SELECT DISTINCT w.* FROM workspaces w

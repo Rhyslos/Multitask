@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSync } from './useSync';
+import { SyncManager } from '../sync/syncManager';
 
 // Fetches and manages tasks for a given set of list IDs.
 // Receives listIDs as an array — one subscription covers all lists in the tab,
@@ -53,9 +54,9 @@ export function useTasks(listIDs) {
         const id = crypto.randomUUID();
 
         await sm.execute(
-            `INSERT INTO tasks (id, title, description, isCompleted, originalCategory, color, listID, taskOrder, deadline, subtasks) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [id, 'New Task', '', 0, listCategory ?? '', listColor ?? '', listID, existingTasks.length, null, null]
+            `INSERT INTO tasks (id, title, description, isCompleted, originalCategory, color, listID, taskOrder, deadline, subtasks, updatedAt) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [id, 'New Task', '', 0, listCategory ?? '', listColor ?? '', listID, existingTasks.length, null, null, SyncManager.nowIso()]
         );
 
         return id;
@@ -76,7 +77,7 @@ export function useTasks(listIDs) {
                 title = ?, description = ?, isCompleted = ?, 
                 listID = ?, originalCategory = ?, color = ?, taskOrder = ?,
                 deadline = ?, subtasks = ?,
-                updatedAt = CURRENT_TIMESTAMP
+                updatedAt = ?
             WHERE id = ?`,
             [
                 updated.title,
@@ -88,6 +89,7 @@ export function useTasks(listIDs) {
                 updated.taskOrder,
                 updated.deadline,
                 subtasksString,
+                SyncManager.nowIso(),
                 taskID,
             ]
         );
@@ -97,20 +99,23 @@ export function useTasks(listIDs) {
         if (!sm) return;
 
         await sm.execute(
-            'UPDATE tasks SET isDeleted = 1, updatedAt = CURRENT_TIMESTAMP WHERE id = ?',
-            [taskID]
+            'UPDATE tasks SET isDeleted = 1, updatedAt = ? WHERE id = ?',
+            [SyncManager.nowIso(), taskID]
         );
     }
 
     // Applies a batch of position updates — used by drag-and-drop to move a
     // task within or between lists. Each update is { id, listID, taskOrder }.
+    // All updates in the batch share one timestamp — they're a single logical
+    // event from the user's perspective and should sort identically.
     async function reorderTasks(updates) {
         if (!sm || updates.length === 0) return;
 
+        const ts = SyncManager.nowIso();
         await sm.runBatch(
             updates.map(u => ({
-                sql: 'UPDATE tasks SET listID = ?, taskOrder = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?',
-                params: [u.listID, u.taskOrder, u.id],
+                sql: 'UPDATE tasks SET listID = ?, taskOrder = ?, updatedAt = ? WHERE id = ?',
+                params: [u.listID, u.taskOrder, ts, u.id],
             }))
         );
     }

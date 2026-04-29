@@ -1,86 +1,48 @@
-import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 import { SyncManager } from '../sync/syncManager';
 
 // variables
 const SyncContext = createContext(null);
-const API = 'http://localhost:8080/api';
 
 // context provider
+//
+// Owns the React-shaped surface: context creation, online state for renders,
+// userEmail state for consumer hooks (e.g. useWorkspacePresence).
+// The SSE connection itself is owned by SyncManager — its lifecycle matches
+// the manager's, not any component's, so it doesn't belong here.
 export function SyncProvider({ children }) {
     const [sm, setSm] = useState(null);
     const [online, setOnline] = useState(navigator.onLine);
     const [ready, setReady] = useState(false);
     const [userEmail, setUserEmail] = useState(null);
-    const esRef = useRef(null);
 
-    // effect hooks
     useEffect(() => {
+        let active = true;
         let unsub;
-        SyncManager.getInstance().then(manager => {
+
+        const initSync = async () => {
+            const manager = await SyncManager.getInstance();
+            if (!active) return;
+
             setSm(manager);
             setReady(true);
             setOnline(manager.isOnline);
-            unsub = manager.subscribe(() => setOnline(manager.isOnline));
-        });
-        return () => { if (unsub) unsub(); };
-    }, []);
-
-    useEffect(() => {
-        if (!userEmail || !sm || !ready) return;
-
-        let retryTimeout = null;
-        let retryDelay = 1000;
-        let isCancelled = false;
-
-        const connect = () => {
-            if (isCancelled) return;
-
-            if (esRef.current) esRef.current.close();
-
-            const es = new EventSource(`${API}/network/stream/${userEmail}`);
-            esRef.current = es;
-
-            es.onopen = () => {
-                retryDelay = 1000;
-            };
-
-            es.onmessage = (event) => {
-                const data = JSON.parse(event.data);
-
-                if (data.type === 'kanban_updated') sm.syncNow();
-                if (data.type === 'invites_updated')
-                    window.dispatchEvent(new CustomEvent('invites_updated', { detail: data }));
-                if (data.type === 'presence_updated')
-                    window.dispatchEvent(new CustomEvent('presence_updated', { detail: data }));
-            };
-
-            es.onerror = () => {
-                es.close();
-                esRef.current = null;
-
-                if (!isCancelled) {
-                    retryTimeout = setTimeout(() => {
-                        retryDelay = Math.min(retryDelay * 2, 30000);
-                        connect();
-                    }, retryDelay);
-                }
-            };
+            // SyncManager._notify fires on every local mutation, server merge,
+            // and online/offline transition — we mirror its online state so
+            // components re-render when connectivity flips.
+            unsub = manager.subscribe(() => {
+                if (active) setOnline(manager.isOnline);
+            });
         };
 
-        const initTimer = setTimeout(connect, 100); // ← only change
+        initSync();
 
         return () => {
-            isCancelled = true;
-            clearTimeout(initTimer);        // ← and clear it on cleanup
-            clearTimeout(retryTimeout);
-            if (esRef.current) {
-                esRef.current.close();
-                esRef.current = null;
-            }
+            active = false;
+            if (unsub) unsub();
         };
-    }, [userEmail, sm, ready]); // ← added ready
+    }, []);
 
-    // return values
     return (
         <SyncContext.Provider value={{ sm, online, ready, userEmail, setUserEmail }}>
             {children}

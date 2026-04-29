@@ -54,8 +54,10 @@ export function usePendingInvites() {
             setInvites(prev => prev.filter(inv => inv.id !== inviteID));
 
             if (action === 'accept') {
-                // Force a fresh sync so the newly shared workspace appears immediately
-                if (sm) await sm.syncNow();
+                // Pull the newly shared workspace from the server immediately.
+                // (Previously this called triggerSync, which has been replaced by
+                // pullFromServer for SSE-driven catch-up.)
+                if (sm) await sm.pullFromServer();
                 window.dispatchEvent(new Event('workspacesUpdated'));
             }
         } catch (err) {

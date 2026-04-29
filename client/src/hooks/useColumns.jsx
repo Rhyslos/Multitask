@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSync } from './useSync';
+import { SyncManager } from '../sync/syncManager';
 
 // Fetches and manages kanban columns for a given tab.
 // A column is a stable entity with a UUID — columnIndex is only used for
@@ -26,14 +27,12 @@ export function useColumns(workspaceID, tabID) {
     useEffect(() => {
         if (!sm) return;
         loadLocal();
+        // sm.subscribe fires on every local mutation AND every server merge,
+        // so the columns stay in sync without any manual triggers. Login-time
+        // reconciliation is handled centrally by SyncManager.setUser().
         const unsub = sm.subscribe(loadLocal);
         return unsub;
     }, [sm, loadLocal]);
-
-    useEffect(() => {
-        if (!sm || !workspaceID) return;
-        sm.sync();
-    }, [sm, workspaceID]);
 
     // Adds a new column at the given columnIndex. The caller is responsible for
     // passing the correct index — typically columnCount (appending at the end)
@@ -43,8 +42,8 @@ export function useColumns(workspaceID, tabID) {
 
         const id = crypto.randomUUID();
         await sm.execute(
-            `INSERT INTO kanban_columns (id, tabID, workspaceID, columnIndex) VALUES (?, ?, ?, ?)`,
-            [id, tabID, workspaceID, columnIndex]
+            `INSERT INTO kanban_columns (id, tabID, workspaceID, columnIndex, updatedAt) VALUES (?, ?, ?, ?, ?)`,
+            [id, tabID, workspaceID, columnIndex, SyncManager.nowIso()]
         );
 
         return id;
@@ -57,8 +56,8 @@ export function useColumns(workspaceID, tabID) {
         if (!sm) return;
 
         await sm.execute(
-            `UPDATE kanban_columns SET isDeleted = 1, updatedAt = CURRENT_TIMESTAMP WHERE id = ?`,
-            [columnID]
+            `UPDATE kanban_columns SET isDeleted = 1, updatedAt = ? WHERE id = ?`,
+            [SyncManager.nowIso(), columnID]
         );
     }
 
@@ -67,10 +66,11 @@ export function useColumns(workspaceID, tabID) {
     async function reorderColumns(updates) {
         if (!sm || updates.length === 0) return;
 
+        const ts = SyncManager.nowIso();
         await sm.runBatch(
             updates.map(({ id, columnIndex }) => ({
-                sql: 'UPDATE kanban_columns SET columnIndex = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?',
-                params: [columnIndex, id],
+                sql: 'UPDATE kanban_columns SET columnIndex = ?, updatedAt = ? WHERE id = ?',
+                params: [columnIndex, ts, id],
             }))
         );
     }

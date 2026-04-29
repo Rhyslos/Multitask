@@ -1,6 +1,7 @@
 // react functions
 import { useState, useEffect, useCallback } from 'react';
 import { useSync } from './useSync';
+import { SyncManager } from '../sync/syncManager';
 
 // hook functions
 export function useTabs(workspaceID) {
@@ -41,8 +42,8 @@ export function useTabs(workspaceID) {
             
             // db insertion functions
             await sm.execute(
-                `INSERT OR IGNORE INTO kanban_tabs (id, name, color, tabOrder, isArchived, workspaceID) VALUES (?,?,?,?,?,?)`,
-                [id, 'Main', '#6c8ebf', 0, 0, workspaceID]
+                `INSERT OR IGNORE INTO kanban_tabs (id, name, color, tabOrder, isArchived, workspaceID, updatedAt) VALUES (?,?,?,?,?,?,?)`,
+                [id, 'Main', '#6c8ebf', 0, 0, workspaceID, SyncManager.nowIso()]
             );
             
             // data retrieval functions
@@ -68,8 +69,8 @@ export function useTabs(workspaceID) {
         const id = crypto.randomUUID();
         const tabOrder = tabs.length;
         await sm.execute(
-            `INSERT INTO kanban_tabs (id, name, color, tabOrder, isArchived, workspaceID) VALUES (?,?,?,?,?,?)`,
-            [id, 'New Tab', '#888888', tabOrder, 0, workspaceID]
+            `INSERT INTO kanban_tabs (id, name, color, tabOrder, isArchived, workspaceID, updatedAt) VALUES (?,?,?,?,?,?,?)`,
+            [id, 'New Tab', '#888888', tabOrder, 0, workspaceID, SyncManager.nowIso()]
         );
         setActiveTabId(id);
         return id;
@@ -78,8 +79,8 @@ export function useTabs(workspaceID) {
     async function updateTab(tabId, changes) {
         const { name, color } = changes;
         await sm.execute(
-            `UPDATE kanban_tabs SET name = ?, color = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?`,
-            [name, color, tabId]
+            `UPDATE kanban_tabs SET name = ?, color = ?, updatedAt = ? WHERE id = ?`,
+            [name, color, SyncManager.nowIso(), tabId]
         );
     }
 
@@ -89,8 +90,8 @@ export function useTabs(workspaceID) {
             setActiveTabId(remaining.length > 0 ? remaining[0].id : null);
         }
         await sm.execute(
-            `UPDATE kanban_tabs SET isArchived = 1, updatedAt = CURRENT_TIMESTAMP WHERE id = ?`,
-            [tabId]
+            `UPDATE kanban_tabs SET isArchived = 1, updatedAt = ? WHERE id = ?`,
+            [SyncManager.nowIso(), tabId]
         );
     }
 

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useSync } from './useSync';
+import { SyncManager } from '../sync/syncManager';
 
 export function useNotes(workspaceID) {
     const { sm } = useSync();
@@ -37,8 +38,8 @@ export function useNotes(workspaceID) {
             if (existing.length === 0) {
                 const id = crypto.randomUUID();
                 await sm.execute(
-                    `INSERT OR IGNORE INTO notes (id, content, workspaceID) VALUES (?,?,?)`,
-                    [id, '{}', workspaceID]
+                    `INSERT OR IGNORE INTO notes (id, content, workspaceID, updatedAt) VALUES (?,?,?,?)`,
+                    [id, '{}', workspaceID, SyncManager.nowIso()]
                 );
             }
         };
@@ -52,8 +53,8 @@ export function useNotes(workspaceID) {
         saveTimer.current = setTimeout(async () => {
             const contentStr = JSON.stringify(newContent);
             await sm.execute(
-                `UPDATE notes SET content = ?, updatedAt = CURRENT_TIMESTAMP WHERE workspaceID = ?`,
-                [contentStr, workspaceID]
+                `UPDATE notes SET content = ?, updatedAt = ? WHERE workspaceID = ?`,
+                [contentStr, SyncManager.nowIso(), workspaceID]
             );
             setSaved(true);
         }, 1000);

@@ -1,6 +1,15 @@
 import sqlite3 from 'sqlite3';
 import { open } from 'sqlite';
 
+// All updatedAt / createdAt columns use millisecond-precision timestamps so the
+// sync engine's "WHERE updatedAt > ?" filter never collides on the same second.
+// SQLite has no native MS-precision DATETIME; we get it via STRFTIME('%f', 'now')
+// which produces e.g. '2026-04-28 14:32:11.847'.
+//
+// Anywhere in the codebase that previously used CURRENT_TIMESTAMP (in DEFAULT clauses
+// or in UPDATE ... SET updatedAt = CURRENT_TIMESTAMP), switch to this same expression.
+const TS_DEFAULT = `(STRFTIME('%Y-%m-%d %H:%M:%f', 'now'))`;
+
 // database initialization functions
 export async function initializeDatabase() {
     const db = await open({
@@ -25,8 +34,8 @@ export async function initializeDatabase() {
         gender TEXT,
         skillset TEXT,
         privacySettings TEXT DEFAULT '{}',
-        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        createdAt DATETIME DEFAULT ${TS_DEFAULT},
+        updatedAt DATETIME DEFAULT ${TS_DEFAULT},
         isDeleted INTEGER DEFAULT 0
     );
 
@@ -35,7 +44,7 @@ export async function initializeDatabase() {
         name TEXT NOT NULL,
         color TEXT NOT NULL,
         userID TEXT NOT NULL,
-        updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updatedAt DATETIME DEFAULT ${TS_DEFAULT},
         isDeleted INTEGER DEFAULT 0,
         FOREIGN KEY (userID) REFERENCES users (id) ON DELETE CASCADE
     );
@@ -45,8 +54,8 @@ export async function initializeDatabase() {
         name TEXT NOT NULL,
         userID TEXT NOT NULL,
         categoryID TEXT,
-        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        createdAt DATETIME DEFAULT ${TS_DEFAULT},
+        updatedAt DATETIME DEFAULT ${TS_DEFAULT},
         isDeleted INTEGER DEFAULT 0,
         FOREIGN KEY (userID) REFERENCES users (id) ON DELETE CASCADE,
         FOREIGN KEY (categoryID) REFERENCES categories (id) ON DELETE SET NULL
@@ -57,8 +66,8 @@ export async function initializeDatabase() {
         workspaceID TEXT NOT NULL,
         userID TEXT NOT NULL,
         role TEXT NOT NULL DEFAULT 'editor',
-        joinedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        joinedAt DATETIME DEFAULT ${TS_DEFAULT},
+        updatedAt DATETIME DEFAULT ${TS_DEFAULT},
         isDeleted INTEGER DEFAULT 0,
         FOREIGN KEY (workspaceID) REFERENCES workspaces (id) ON DELETE CASCADE,
         FOREIGN KEY (userID) REFERENCES users (id) ON DELETE CASCADE
@@ -70,8 +79,8 @@ export async function initializeDatabase() {
         senderID TEXT NOT NULL,
         receiverEmail TEXT NOT NULL,
         status TEXT NOT NULL DEFAULT 'pending',
-        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        createdAt DATETIME DEFAULT ${TS_DEFAULT},
+        updatedAt DATETIME DEFAULT ${TS_DEFAULT},
         FOREIGN KEY (workspaceID) REFERENCES workspaces (id) ON DELETE CASCADE,
         FOREIGN KEY (senderID) REFERENCES users (id) ON DELETE CASCADE
     );
@@ -83,7 +92,7 @@ export async function initializeDatabase() {
         tabOrder INTEGER NOT NULL DEFAULT 0,
         isArchived INTEGER NOT NULL DEFAULT 0,
         workspaceID TEXT NOT NULL,
-        updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updatedAt DATETIME DEFAULT ${TS_DEFAULT},
         isDeleted INTEGER DEFAULT 0,
         FOREIGN KEY (workspaceID) REFERENCES workspaces (id) ON DELETE CASCADE
     );
@@ -93,7 +102,7 @@ export async function initializeDatabase() {
         tabID TEXT NOT NULL,
         workspaceID TEXT NOT NULL,
         columnIndex INTEGER NOT NULL DEFAULT 0,
-        updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updatedAt DATETIME DEFAULT ${TS_DEFAULT},
         isDeleted INTEGER DEFAULT 0,
         FOREIGN KEY (tabID) REFERENCES kanban_tabs (id) ON DELETE CASCADE,
         FOREIGN KEY (workspaceID) REFERENCES workspaces (id) ON DELETE CASCADE
@@ -109,7 +118,7 @@ export async function initializeDatabase() {
         columnID TEXT NOT NULL,
         workspaceID TEXT NOT NULL,
         tabID TEXT,
-        updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updatedAt DATETIME DEFAULT ${TS_DEFAULT},
         isDeleted INTEGER DEFAULT 0,
         FOREIGN KEY (columnID) REFERENCES kanban_columns (id) ON DELETE CASCADE,
         FOREIGN KEY (workspaceID) REFERENCES workspaces (id) ON DELETE CASCADE,
@@ -127,7 +136,7 @@ export async function initializeDatabase() {
         taskOrder INTEGER NOT NULL DEFAULT 0,
         deadline TEXT,
         subtasks TEXT,
-        updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updatedAt DATETIME DEFAULT ${TS_DEFAULT},
         isDeleted INTEGER DEFAULT 0,
         FOREIGN KEY (listID) REFERENCES lists (id) ON DELETE CASCADE
     );
@@ -136,7 +145,7 @@ export async function initializeDatabase() {
         id TEXT PRIMARY KEY,
         content TEXT NOT NULL DEFAULT '{}',
         workspaceID TEXT NOT NULL,
-        updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updatedAt DATETIME DEFAULT ${TS_DEFAULT},
         isDeleted INTEGER DEFAULT 0,
         FOREIGN KEY (workspaceID) REFERENCES workspaces (id) ON DELETE CASCADE
     );
@@ -147,7 +156,7 @@ export async function initializeDatabase() {
         workspaceID TEXT NOT NULL,
         color TEXT,
         groupOrder INTEGER NOT NULL DEFAULT 0,
-        updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updatedAt DATETIME DEFAULT ${TS_DEFAULT},
         isDeleted INTEGER DEFAULT 0,
         FOREIGN KEY (workspaceID) REFERENCES workspaces (id) ON DELETE CASCADE
     );
@@ -158,7 +167,7 @@ export async function initializeDatabase() {
         workspaceID TEXT NOT NULL,
         groupID TEXT,
         pageOrder INTEGER NOT NULL DEFAULT 0,
-        updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updatedAt DATETIME DEFAULT ${TS_DEFAULT},
         isDeleted INTEGER DEFAULT 0,
         FOREIGN KEY (workspaceID) REFERENCES workspaces (id) ON DELETE CASCADE
     );

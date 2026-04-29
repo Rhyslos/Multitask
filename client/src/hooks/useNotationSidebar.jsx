@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSync } from './useSync';
+import { SyncManager } from '../sync/syncManager';
 
 export function useNotationSidebar(workspaceID) {
     const { sm } = useSync();
@@ -21,66 +22,61 @@ export function useNotationSidebar(workspaceID) {
             ),
         ]);
 
-        console.log('[sidebar] groups:', fetchedGroups);
-        console.log('[sidebar] pages:', fetchedPages);
-        console.log('[sidebar] loading done');
-
         setGroups(fetchedGroups);
         setPages(fetchedPages);
         setLoading(false);
     };
 
     useEffect(() => {
-        console.log('[sidebar] sm:', sm);
-        console.log('[sidebar] workspaceID:', workspaceID);
         if (!sm || !workspaceID) return;
         load();
+        // sm.subscribe fires on every local mutation AND every server merge,
+        // so the sidebar stays in sync without any manual triggers.
         const unsub = sm.subscribe(load);
         return unsub;
     }, [sm, workspaceID]);
+
+    // Note: every sm.execute() below already schedules a debounced push to the server
+    // automatically. Calling sm.triggerSync() afterwards (the old API) was redundant
+    // and the new API doesn't need it at all.
 
     async function createPage(title = 'Untitled', groupID = null) {
         const id = crypto.randomUUID();
         const pagesInGroup = pages.filter(p => p.groupID === groupID);
         await sm.execute(
-            `INSERT INTO notation_pages (id, title, workspaceID, groupID, pageOrder) VALUES (?, ?, ?, ?, ?)`,
-            [id, title, workspaceID, groupID, pagesInGroup.length]
+            `INSERT INTO notation_pages (id, title, workspaceID, groupID, pageOrder, updatedAt) VALUES (?, ?, ?, ?, ?, ?)`,
+            [id, title, workspaceID, groupID, pagesInGroup.length, SyncManager.nowIso()]
         );
-        await sm.sync();
         return id;
     }
 
     async function createGroup(name) {
         const id = crypto.randomUUID();
         await sm.execute(
-            `INSERT INTO notation_groups (id, name, workspaceID, groupOrder) VALUES (?, ?, ?, ?)`,
-            [id, name, workspaceID, groups.length]
+            `INSERT INTO notation_groups (id, name, workspaceID, groupOrder, updatedAt) VALUES (?, ?, ?, ?, ?)`,
+            [id, name, workspaceID, groups.length, SyncManager.nowIso()]
         );
-        await sm.sync();
     }
 
     async function renameGroup(id, name) {
         await sm.execute(
-            `UPDATE notation_groups SET name = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?`,
-            [name, id]
+            `UPDATE notation_groups SET name = ?, updatedAt = ? WHERE id = ?`,
+            [name, SyncManager.nowIso(), id]
         );
-        await sm.syncNow();
     }
 
     async function renamePage(id, title) {
         await sm.execute(
-            `UPDATE notation_pages SET title = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?`,
-            [title, id]
+            `UPDATE notation_pages SET title = ?, updatedAt = ? WHERE id = ?`,
+            [title, SyncManager.nowIso(), id]
         );
-        await sm.syncNow();
     }
 
     async function colorGroup(id, color) {
         await sm.execute(
-            `UPDATE notation_groups SET color = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?`,
-            [color, id]
+            `UPDATE notation_groups SET color = ?, updatedAt = ? WHERE id = ?`,
+            [color, SyncManager.nowIso(), id]
         );
-        await sm.syncNow();
     }
 
     return { groups, pages, loading, createGroup, createPage, renameGroup, renamePage, colorGroup };

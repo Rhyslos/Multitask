@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSync } from './useSync';
+import { SyncManager } from '../sync/syncManager';
 
 // Fetches and manages lists for a given set of column IDs.
 // Receives columnIDs as an array so the parent (Kanban page) can pass all
@@ -41,9 +42,9 @@ export function useLists(columnIDs) {
 
         const id = crypto.randomUUID();
         await sm.execute(
-            `INSERT INTO lists (id, name, category, color, direction, columnID, workspaceID, tabID) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [id, 'New List', '', '', 'vertical', columnID, workspaceID, tabID]
+            `INSERT INTO lists (id, name, category, color, direction, columnID, workspaceID, tabID, updatedAt) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [id, 'New List', '', '', 'vertical', columnID, workspaceID, tabID, SyncManager.nowIso()]
         );
 
         return id;
@@ -59,23 +60,25 @@ export function useLists(columnIDs) {
 
         const updated = { ...list, ...changes };
         await sm.execute(
-            `UPDATE lists SET name = ?, category = ?, color = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?`,
-            [updated.name, updated.category, updated.color, listID]
+            `UPDATE lists SET name = ?, category = ?, color = ?, updatedAt = ? WHERE id = ?`,
+            [updated.name, updated.category, updated.color, SyncManager.nowIso(), listID]
         );
     }
 
-    // Soft-deletes a list and all its tasks in a single batch.
+    // Soft-deletes a list and all its tasks in a single batch. Both statements
+    // share one timestamp — they represent one logical action.
     async function deleteList(listID) {
         if (!sm) return;
 
+        const ts = SyncManager.nowIso();
         await sm.runBatch([
             {
-                sql: 'UPDATE lists SET isDeleted = 1, updatedAt = CURRENT_TIMESTAMP WHERE id = ?',
-                params: [listID],
+                sql: 'UPDATE lists SET isDeleted = 1, updatedAt = ? WHERE id = ?',
+                params: [ts, listID],
             },
             {
-                sql: 'UPDATE tasks SET isDeleted = 1, updatedAt = CURRENT_TIMESTAMP WHERE listID = ?',
-                params: [listID],
+                sql: 'UPDATE tasks SET isDeleted = 1, updatedAt = ? WHERE listID = ?',
+                params: [ts, listID],
             },
         ]);
     }

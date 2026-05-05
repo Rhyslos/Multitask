@@ -2,7 +2,7 @@
 import { Router } from 'express';
 import crypto from 'crypto';
 import { promisify } from 'util';
-import { catchAsync } from './apiUtils.mjs';
+import { catchAsync, nowIso } from './apiUtils.mjs';
 
 const scrypt = promisify(crypto.scrypt);
 
@@ -116,8 +116,8 @@ export default function createUserRouter(db) {
         const skillsetStr = skillset ? JSON.stringify(skillset) : '[]';
 
         await db.run(
-            'UPDATE users SET displayName = ?, firstName = ?, lastName = ?, email = ?, countryIso = ?, phoneNumber = ?, skillset = ?, gender = ?, privacySettings = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?',
-            displayName || null, firstName || null, lastName || null, email, countryIso || null, phoneNumber || null, skillsetStr, gender || null, privacySettings || '{}', req.params.id
+            'UPDATE users SET displayName = ?, firstName = ?, lastName = ?, email = ?, countryIso = ?, phoneNumber = ?, skillset = ?, gender = ?, privacySettings = ?, updatedAt = ? WHERE id = ?',
+            displayName || null, firstName || null, lastName || null, email, countryIso || null, phoneNumber || null, skillsetStr, gender || null, privacySettings || '{}', nowIso(), req.params.id
         );
         
         // ADD displayName to the SELECT statement:
@@ -137,7 +137,7 @@ export default function createUserRouter(db) {
         if (!valid) return res.status(401).json({ error: 'Invalid current password.' });
 
         const newHash = await hashPassword(newPassword);
-        await db.run('UPDATE users SET password_hash = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?', newHash, req.params.id);
+        await db.run('UPDATE users SET password_hash = ?, updatedAt = ? WHERE id = ?', newHash, nowIso(), req.params.id);
         
         return res.json({ message: 'Password updated successfully.' });
     }));

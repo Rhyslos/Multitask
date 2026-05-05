@@ -8,7 +8,7 @@ export default function WorkspaceSettingsModal({ workspace, onClose }) {
     const { user } = useAuth();
     // Grab the sync manager from context
     const { sm } = useSync();
-    
+
     const [inviteEmail, setInviteEmail] = useState('');
     const [status, setStatus] = useState({ type: '', text: '' });
     const [loading, setLoading] = useState(false);
@@ -21,10 +21,12 @@ export default function WorkspaceSettingsModal({ workspace, onClose }) {
         setStatus({ type: '', text: '' });
 
         try {
-            // 1. Force a blocking sync to guarantee the server knows about this workspace 
-            // before we try to create an invitation for it.
+            // 1. Ensure the server knows about this workspace before we try to invite to it.
+            //    A freshly created workspace might still be sitting in the local debounce
+            //    window — flushPush() forces any pending push to fire NOW and waits for
+            //    the round trip. If nothing is pending, it resolves immediately.
             if (sm) {
-                await sm.forceSync();
+                await sm.flushPush();
             }
 
             // 2. Send the invitation
@@ -73,9 +75,9 @@ export default function WorkspaceSettingsModal({ workspace, onClose }) {
                                     required
                                     style={{ flex: 1 }}
                                 />
-                                <button 
-                                    type="submit" 
-                                    className="modal-submit" 
+                                <button
+                                    type="submit"
+                                    className="modal-submit"
                                     disabled={loading || !inviteEmail}
                                     style={{ margin: 0, padding: '0 16px', whiteSpace: 'nowrap' }}
                                 >
@@ -84,7 +86,7 @@ export default function WorkspaceSettingsModal({ workspace, onClose }) {
                             </div>
                         </div>
                     </form>
-                    
+
                     {status.text && (
                         <p className={status.type === 'error' ? 'modal-error' : ''} style={{ marginTop: '8px', fontSize: '0.9rem', color: status.type === 'success' ? '#7ab648' : undefined }}>
                             {status.text}

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import crypto from 'crypto';
-import { catchAsync } from './apiUtils.mjs';
-import { notifyUser } from '../modules/networking.mjs';
+import { catchAsync, nowIso } from './apiUtils.mjs';
+import { notifyUser, notifyEmails } from '../modules/networking.mjs';
 
 // router configuration
 export default function createInvitesRouter(db) {
@@ -69,28 +69,72 @@ export default function createInvitesRouter(db) {
 
     // response routes
     router.post('/respond', catchAsync(async (req, res) => {
-        const { inviteID, userID, action } = req.body; 
+        const { inviteID, userID, action } = req.body;
+
+        // one timestamp for the whole transaction — workspace_members insert,
+        // workspaces.updatedAt bump, and the invitations row update all
+        // describe a single user-visible event ("Alice accepted").
+        const ts = nowIso();
+
+        let workspaceID = null;
 
         if (action === 'accept') {
             const invite = await db.get('SELECT workspaceID FROM invitations WHERE id = ?', inviteID);
             if (invite) {
+                workspaceID = invite.workspaceID;
                 const memberId = crypto.randomUUID();
+                // workspace_members.updatedAt must be passed explicitly even
+                // though the column has a ms-precision default — being explicit
+                // keeps the timestamp identical across the three writes below,
+                // so other clients see them as one consistent batch on next pull.
                 await db.run(
-                    'INSERT OR IGNORE INTO workspace_members (id, workspaceID, userID, role) VALUES (?, ?, ?, ?)',
-                    memberId, invite.workspaceID, userID, 'editor'
+                    'INSERT OR IGNORE INTO workspace_members (id, workspaceID, userID, role, updatedAt) VALUES (?, ?, ?, ?, ?)',
+                    memberId, workspaceID, userID, 'editor', ts
                 );
-                
+
+                // bump workspaces.updatedAt so SyncManager.pullFromServer picks
+                // up the new member relationship via the workspaces row.
+                // CURRENT_TIMESTAMP would be second-precision and silently lose
+                // this update against ms-precision client watermarks.
                 await db.run(
-                    'UPDATE workspaces SET updatedAt = CURRENT_TIMESTAMP WHERE id = ?',
-                    invite.workspaceID
+                    'UPDATE workspaces SET updatedAt = ? WHERE id = ?',
+                    ts, workspaceID
                 );
             }
         }
 
+        // invitations isn't in SYNC_TABLES — clients fetch this via /invites/pending
+        // explicitly — but we use nowIso() anyway for format consistency.
         await db.run(
-            'UPDATE invitations SET status = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?',
-            action === 'accept' ? 'accepted' : 'rejected', inviteID
+            'UPDATE invitations SET status = ?, updatedAt = ? WHERE id = ?',
+            action === 'accept' ? 'accepted' : 'rejected', ts, inviteID
         );
+
+        // Tell every member of the workspace (including the new member who just
+        // joined) that the workspace changed. Without this, existing members
+        // wouldn't know about the new member until their next push or reconnect.
+        // No originClientId — the acceptance was driven by an HTTP call, not a
+        // sync push, so there's no "originating tab" to suppress an echo for.
+        // The acceptor's own client gets one redundant pull (workspacesUpdated
+        // window event already triggers one), which is idempotent and cheap.
+        if (action === 'accept' && workspaceID) {
+            try {
+                const recipients = await db.all(`
+                    SELECT u.email
+                    FROM workspace_members wm
+                    JOIN users u ON wm.userID = u.id
+                    WHERE wm.workspaceID = ? AND wm.isDeleted = 0
+                `, workspaceID);
+
+                notifyEmails(
+                    recipients.map(r => r.email),
+                    'kanban_updated',
+                    { trigger: 'invite_accepted', originClientId: null }
+                );
+            } catch (broadcastError) {
+                console.error('[INVITES] Broadcast failed:', broadcastError.message);
+            }
+        }
 
         return res.json({ message: `Invite ${action}ed.` });
     }));

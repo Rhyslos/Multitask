@@ -28,6 +28,21 @@ export function notifyUser(email, type, payload) {
     }
 }
 
+// Broadcast to a list of emails. Pure transport — caller decides the recipient
+// set with whatever SQL they need. Iterating notifyUser keeps the offline-skip
+// logic in one place (notifyUser is a no-op if the email has no SSE clients).
+//
+// Recipients echo their own writes too — the originating client is expected to
+// ignore the echo by checking originClientId in the payload against its own
+// SyncManager._clientId. That keeps the server-side query simple (no exclusion
+// joins) and generalizes to other origin-aware events.
+export function notifyEmails(emails, type, payload) {
+    if (!Array.isArray(emails)) return;
+    for (const email of emails) {
+        notifyUser(email, type, payload);
+    }
+}
+
 // interval functions
 setInterval(() => {
     clients.forEach((userStreams) => {

@@ -1,4 +1,4 @@
-// math functions
+// user functions
 export function getDistanceToLine(px, py, x1, y1, x2, y2) {
     const A = px - x1;
     const B = py - y1;
@@ -27,7 +27,6 @@ export function getDistanceToLine(px, py, x1, y1, x2, y2) {
     return Math.sqrt(dx * dx + dy * dy);
 }
 
-// returns the bounding box of a node element with normalized (positive) dims
 export function getNodeBounds(el) {
     const minX = Math.min(el.x, el.x + (el.width || 0));
     const maxX = Math.max(el.x, el.x + (el.width || 0));
@@ -36,7 +35,6 @@ export function getNodeBounds(el) {
     return { minX, maxX, minY, maxY, w: maxX - minX, h: maxY - minY };
 }
 
-// the four anchor "dots" that appear on hover. t=0.5 means midpoint of that side.
 export function getAnchorDots(el) {
     const b = getNodeBounds(el);
     return [
@@ -47,12 +45,10 @@ export function getAnchorDots(el) {
     ];
 }
 
-// resolve an anchor {side, t} on an element to a world-space point
 export function resolveAnchor(el, anchor) {
     const b = getNodeBounds(el);
     const t = anchor.t ?? 0.5;
     if (el.type === 'circle') {
-        // for ellipses, place anchor on the ellipse perimeter at the angle implied by side+t
         const cx = b.minX + b.w / 2;
         const cy = b.minY + b.h / 2;
         const rx = b.w / 2;
@@ -76,8 +72,6 @@ export function resolveAnchor(el, anchor) {
     }
 }
 
-// Given a world point near an element's edge, find which side and t along it.
-// Returns null if not close enough to an edge.
 export function getAnchorFromPoint(el, px, py, tol = 12) {
     const b = getNodeBounds(el);
     if (b.w === 0 || b.h === 0) return null;
@@ -90,17 +84,12 @@ export function getAnchorFromPoint(el, px, py, tol = 12) {
         const dx = px - cx;
         const dy = py - cy;
 
-        // Distance from the point to the ellipse perimeter (approximate).
-        // We compute the perimeter point along the same angle, then measure how far the
-        // cursor is from it. Tolerance applies in both directions so users can hit either
-        // just inside or just outside the outline.
         const angle = Math.atan2(dy, dx);
         const perimX = rx * Math.cos(angle);
         const perimY = ry * Math.sin(angle);
         const distFromPerim = Math.hypot(dx - perimX, dy - perimY);
         if (distFromPerim > tol) return null;
 
-        // Pick a side label from the dominant angle.
         let side;
         if (angle >= -Math.PI / 4 && angle < Math.PI / 4)        side = 'right';
         else if (angle >= Math.PI / 4 && angle < 3 * Math.PI / 4) side = 'bottom';
@@ -109,7 +98,6 @@ export function getAnchorFromPoint(el, px, py, tol = 12) {
         return { side, t: 0.5 };
     }
 
-    // For rect/text: project point onto the nearest edge and compute t.
     const candidates = [
         { side: 'top',    dist: Math.abs(py - b.minY), t: (px - b.minX) / b.w, inRange: px >= b.minX - tol && px <= b.maxX + tol },
         { side: 'bottom', dist: Math.abs(py - b.maxY), t: (px - b.minX) / b.w, inRange: px >= b.minX - tol && px <= b.maxX + tol },
@@ -127,43 +115,65 @@ export function isNodeType(type) {
     return type === 'rectangle' || type === 'circle' || type === 'text';
 }
 
-// hit-test for selection — same semantics as before, plus connection (arrow) hit-test
+export function isHittingLabel(px, py, el) {
+    const tol = 10;
+    if (el.type === 'text') {
+        const b = getNodeBounds(el);
+        return px >= b.minX - tol && px <= b.maxX + tol && py >= b.minY - tol && py <= b.maxY + tol;
+    }
+    
+    const b = getNodeBounds(el);
+    const padding = 16;
+    const maxWidth = Math.max(10, b.w - padding);
+    const labelStr = el.label || '';
+    
+    const approxLines = labelStr ? Math.max(1, Math.ceil((labelStr.length * 8) / maxWidth)) : 1;
+    const labelH = Math.max(20, approxLines * 16);
+    const labelW = labelStr ? (approxLines > 1 ? maxWidth : labelStr.length * 8) : 40;
+
+    const lx = b.minX + b.w / 2 - labelW / 2;
+    const ly = b.minY + b.h / 2 - labelH / 2;
+
+    return px >= lx - tol && px <= lx + labelW + tol && py >= ly - tol && py <= ly + labelH + tol;
+}
+
 export function isHittingEdge(px, py, el, allElements) {
-    const tol = 8;
+    const tol = 10;
 
     if (el.type === 'arrow') {
-        // resolve endpoints, possibly through connected nodes
         const ends = getArrowEndpoints(el, allElements);
         if (!ends) return false;
         return getDistanceToLine(px, py, ends.from.x, ends.from.y, ends.to.x, ends.to.y) <= tol;
     }
 
+    const inLabel = isHittingLabel(px, py, el);
     const b = getNodeBounds(el);
+
     if (el.type === 'rectangle' || el.type === 'text') {
         const inOuter = px >= b.minX - tol && px <= b.maxX + tol && py >= b.minY - tol && py <= b.maxY + tol;
         const inInner = px >= b.minX + tol && px <= b.maxX - tol && py >= b.minY + tol && py <= b.maxY - tol;
-        return el.type === 'text' ? inOuter : (inOuter && !inInner);
+        return el.type === 'text' ? inOuter : (inOuter && (!inInner || inLabel));
     }
+    
     if (el.type === 'circle') {
         const rx = b.w / 2;
         const ry = b.h / 2;
         const cx = b.minX + rx;
         const cy = b.minY + ry;
         if (rx === 0 || ry === 0) return false;
+        
         const isInsideOuter = ((px - cx) ** 2) / ((rx + tol) ** 2) + ((py - cy) ** 2) / ((ry + tol) ** 2) <= 1;
         const innerRx = Math.max(0, rx - tol);
         const innerRy = Math.max(0, ry - tol);
         const isInsideInner = innerRx > 0 && innerRy > 0
             ? ((px - cx) ** 2) / (innerRx ** 2) + ((py - cy) ** 2) / (innerRy ** 2) <= 1
             : false;
-        return isInsideOuter && !isInsideInner;
+            
+        return isInsideOuter && (!isInsideInner || inLabel);
     }
     return false;
 }
 
-// Resolve an arrow's two endpoints in world coords, whether anchored or free-floating.
-// Free arrows store {x,y,width,height} (legacy); anchored arrows store {fromId/toId/fromAnchor/toAnchor}
-// or hybrids (one end anchored, one end free at a stored point).
 export function getArrowEndpoints(arrow, allElements) {
     let from, to;
 
@@ -190,23 +200,21 @@ export function getArrowEndpoints(arrow, allElements) {
     return { from, to };
 }
 
-// render functions
 const COLOR_DEFAULT   = '#1e1e1e';
 const COLOR_SELECTED  = '#3b82f6';
 const COLOR_HIGHLIGHT = '#f59e0b';
 const COLOR_STARTER   = '#10b981';
+const COLOR_HOVER     = 'rgba(59, 130, 246, 0.3)';
 const FILL_DEFAULT    = '#fafaf9';
 const FILL_HIGHLIGHT  = '#fef3c7';
 const FILL_STARTER    = '#ecfdf5';
 const FILL_SELECTED   = '#eff6ff';
 const CORNER_RADIUS   = 8;
 
-// helper — clamp corner radius for tiny shapes so they don't become pills
 function effectiveRadius(w, h) {
     return Math.min(CORNER_RADIUS, Math.abs(w) / 2, Math.abs(h) / 2);
 }
 
-// rounded-rect path (handles negative w/h via normalization)
 function roundedRectPath(ctx, x, y, w, h, r) {
     const minX = Math.min(x, x + w);
     const maxX = Math.max(x, x + w);
@@ -226,8 +234,7 @@ function roundedRectPath(ctx, x, y, w, h, r) {
     ctx.closePath();
 }
 
-// fill with shadow, stroke without — keeps the outline crisp.
-function fillWithShadowThenStroke(ctx, fill, stroke, lineWidth) {
+function fillWithShadowThenStroke(ctx, fill, stroke, lineWidth, hoverStroke) {
     ctx.save();
     ctx.shadowColor = 'rgba(15, 23, 42, 0.12)';
     ctx.shadowBlur = 12;
@@ -237,13 +244,61 @@ function fillWithShadowThenStroke(ctx, fill, stroke, lineWidth) {
     ctx.fill();
     ctx.restore();
 
+    if (hoverStroke) {
+        ctx.save();
+        ctx.strokeStyle = hoverStroke;
+        ctx.lineWidth = 10;
+        ctx.stroke();
+        ctx.restore();
+    }
+
     ctx.strokeStyle = stroke;
     ctx.lineWidth = lineWidth;
     ctx.stroke();
 }
 
+function drawLabel(ctx, element, color) {
+    if (!element.label) return;
+    const b = getNodeBounds(element);
+    if (b.w === 0 || b.h === 0) return;
+    
+    ctx.save();
+    ctx.font = '14px Arial, sans-serif';
+    ctx.fillStyle = color;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    const padding = 16;
+    const maxWidth = Math.max(10, b.w - padding);
+    const words = element.label.split(' ');
+    const lines = [];
+    let currentLine = words[0] || '';
+
+    for (let i = 1; i < words.length; i++) {
+        const word = words[i];
+        const width = ctx.measureText(currentLine + " " + word).width;
+        if (width < maxWidth) {
+            currentLine += " " + word;
+        } else {
+            lines.push(currentLine);
+            currentLine = word;
+        }
+    }
+    if (currentLine) lines.push(currentLine);
+
+    const lineHeight = 16;
+    const totalHeight = lines.length * lineHeight;
+    const startY = b.minY + b.h / 2 - totalHeight / 2 + lineHeight / 2;
+
+    for (let i = 0; i < lines.length; i++) {
+        ctx.fillText(lines[i], b.minX + b.w / 2, startY + i * lineHeight);
+    }
+    
+    ctx.restore();
+}
+
 export function drawElement(ctx, element, opts = {}, allElements = []) {
-    const { isSelected = false, isHighlighted = false, isStarter = false } = opts;
+    const { isSelected = false, isHighlighted = false, isStarter = false, isHovered = false } = opts;
 
     let stroke = COLOR_DEFAULT;
     let fill = FILL_DEFAULT;
@@ -252,13 +307,16 @@ export function drawElement(ctx, element, opts = {}, allElements = []) {
     else if (isSelected)   { stroke = COLOR_SELECTED;  fill = FILL_SELECTED;  lineWidth = 2; }
     else if (isStarter)    { stroke = COLOR_STARTER;   fill = FILL_STARTER;   lineWidth = 2; }
 
+    const hoverStroke = (isHovered && !isSelected) ? COLOR_HOVER : null;
+
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
     if (element.type === 'rectangle') {
         const r = effectiveRadius(element.width, element.height);
         roundedRectPath(ctx, element.x, element.y, element.width, element.height, r);
-        fillWithShadowThenStroke(ctx, fill, stroke, lineWidth);
+        fillWithShadowThenStroke(ctx, fill, stroke, lineWidth, hoverStroke);
+        drawLabel(ctx, element, stroke);
     } else if (element.type === 'circle') {
         const radiusX = Math.abs(element.width) / 2;
         const radiusY = Math.abs(element.height) / 2;
@@ -266,14 +324,29 @@ export function drawElement(ctx, element, opts = {}, allElements = []) {
         const centerY = element.y + element.height / 2;
         ctx.beginPath();
         ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, 2 * Math.PI);
-        fillWithShadowThenStroke(ctx, fill, stroke, lineWidth);
+        fillWithShadowThenStroke(ctx, fill, stroke, lineWidth, hoverStroke);
+        drawLabel(ctx, element, stroke);
     } else if (element.type === 'arrow') {
         const ends = getArrowEndpoints(element, allElements);
         if (!ends) return;
+        
+        if (hoverStroke) {
+            ctx.save();
+            ctx.strokeStyle = hoverStroke;
+            ctx.lineWidth = 10;
+            drawArrowLine(ctx, ends.from.x, ends.from.y, ends.to.x, ends.to.y);
+            ctx.restore();
+        }
+
         ctx.strokeStyle = stroke;
-        ctx.lineWidth = lineWidth + 1; // arrows feel right a touch thicker
+        ctx.lineWidth = lineWidth + 1;
         drawArrowLine(ctx, ends.from.x, ends.from.y, ends.to.x, ends.to.y);
     } else if (element.type === 'text') {
+        if (hoverStroke) {
+            const b = getNodeBounds(element);
+            ctx.fillStyle = 'rgba(59, 130, 246, 0.08)';
+            ctx.fillRect(b.minX - 6, b.minY - 6, b.w + 12, b.h + 12);
+        }
         ctx.font = '16px Arial, sans-serif';
         ctx.fillStyle = stroke;
         ctx.textBaseline = 'top';
@@ -281,7 +354,6 @@ export function drawElement(ctx, element, opts = {}, allElements = []) {
     }
 }
 
-// Resize handles — 4 squares at edge midpoints. Returned in world coords.
 export function getResizeHandles(el) {
     const b = getNodeBounds(el);
     const SIZE = 8;
@@ -296,7 +368,7 @@ export function getResizeHandles(el) {
 export function getHandleAtPoint(el, px, py) {
     if (!isNodeType(el.type)) return null;
     const handles = getResizeHandles(el);
-    const SLOP = 6; // generous hit area
+    const SLOP = 6;
     for (const h of handles) {
         if (Math.abs(px - h.x) <= h.size / 2 + SLOP && Math.abs(py - h.y) <= h.size / 2 + SLOP) {
             return h;
@@ -317,9 +389,6 @@ export function drawResizeHandles(ctx, el) {
     });
 }
 
-// Apply a one-axis resize to a node element. Returns updated element fields.
-// `start` is the original {x,y,width,height} captured at pointer-down.
-// (worldX, worldY) is the current cursor in world coords.
 export function applyResize(start, side, worldX, worldY) {
     let { x, y, width, height } = start;
     if (side === 'right') {
@@ -338,7 +407,6 @@ export function applyResize(start, side, worldX, worldY) {
     return { x, y, width, height };
 }
 
-// Normalize negative w/h after a resize so width/height stay positive.
 export function normalizeBounds(el) {
     let { x, y, width, height } = el;
     if (width < 0)  { x += width;  width  = -width;  }
@@ -360,7 +428,6 @@ export function drawArrowLine(ctx, x1, y1, x2, y2) {
     ctx.stroke();
 }
 
-// Draw the four anchor dots on a node — used as hover affordance with the arrow tool.
 export function drawAnchorDots(ctx, el) {
     const dots = getAnchorDots(el);
     ctx.fillStyle = '#ffffff';
@@ -374,13 +441,10 @@ export function drawAnchorDots(ctx, el) {
     });
 }
 
-// graph traversal — BFS from starter, ordering siblings by connection-creation order.
-// Returns ordered steps interleaving nodes and edges: [{kind:'node',id}, {kind:'edge',id}, ...]
-// Cycles: revisited nodes are recorded once with kind:'cycle'.
 export function buildExecutionOrder(starterId, elements) {
     if (!starterId) return [];
     const nodeById = new Map();
-    const outgoing = new Map(); // nodeId -> [arrow, ...] in creation order
+    const outgoing = new Map();
     elements.forEach(el => {
         if (isNodeType(el.type)) nodeById.set(el.id, el);
     });

@@ -1,6 +1,4 @@
-// Pure rendering. Takes a 2D context and a state object; produces no React effects.
-// Called once per frame from GraphCanvas's useLayoutEffect.
-
+// user functions
 import {
     drawElement,
     drawAnchorDots,
@@ -10,14 +8,12 @@ import {
     isNodeType,
 } from './GraphHelper';
 
-// state shape:
-//   { width, height, camera: {x,y,zoom}, elements, selectedId, starterId,
-//     highlightedIds: Set, activeTool, hoverNodeId, action, pendingConnection }
 export function renderCanvas(ctx, state) {
     const {
         width, height, camera, elements,
         selectedId, starterId, highlightedIds,
         activeTool, hoverNodeId, action, pendingConnection,
+        hoverEdgeNodeId
     } = state;
 
     ctx.clearRect(0, 0, width, height);
@@ -26,26 +22,23 @@ export function renderCanvas(ctx, state) {
     ctx.translate(camera.x, camera.y);
     ctx.scale(camera.zoom, camera.zoom);
 
-    // 1. all elements (arrows resolve their endpoints from connected nodes)
     elements.forEach(el => drawElement(ctx, el, {
         isSelected: el.id === selectedId,
         isHighlighted: highlightedIds?.has(el.id) || false,
         isStarter: el.id === starterId,
+        isHovered: el.id === hoverEdgeNodeId
     }, elements));
 
-    // 2. anchor dots when arrow tool hovers a node
     if (activeTool === 'arrow' && hoverNodeId) {
         const node = elements.find(e => e.id === hoverNodeId);
         if (node && isNodeType(node.type)) drawAnchorDots(ctx, node);
     }
 
-    // 3. resize handles around the selected node
     if (activeTool === 'select' && selectedId) {
         const sel = elements.find(e => e.id === selectedId);
         if (sel && isNodeType(sel.type)) drawResizeHandles(ctx, sel);
     }
 
-    // 4. rubber-band line for in-progress connection
     if (action === 'connecting' && pendingConnection) {
         const fromEl = elements.find(e => e.id === pendingConnection.fromId);
         if (fromEl) {

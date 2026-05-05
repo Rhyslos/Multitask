@@ -1,3 +1,4 @@
+// import functions
 import { useState } from 'react';
 import { useNavigate, useLocation, matchPath } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
@@ -26,13 +27,12 @@ function getAvatarColor(member) {
     return '#' + '00000'.substring(0, 6 - c.length) + c;
 }
 
-// component
+// component functions
 export default function Navbar() {
     const { user } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
     
-    // routing states
     const match = matchPath({ path: "/workspace/:workspaceID/*" }, location.pathname);
     const workspaceID = match?.params?.workspaceID;
     
@@ -42,7 +42,6 @@ export default function Navbar() {
     const inWorkspace = !!workspaceID;
     const { members } = useWorkspacePresence(workspaceID);
 
-    // navigation handlers
     function navTo(page) {
         if (workspaceID) navigate(`/workspace/${workspaceID}/${page}`);
     }
@@ -63,8 +62,8 @@ export default function Navbar() {
                     <>
                         <div className="navbar-pages">
                             <button 
-                                className={`navbar-page-btn ${isActive('graph editor') ? 'active' : ''}`}
-                                onClick={() => navTo('graph editor')}
+                                className={`navbar-page-btn ${isActive('graph') ? 'active' : ''}`}
+                                onClick={() => navTo('graph')}
                             >
                                 Graph Editor
                             </button>

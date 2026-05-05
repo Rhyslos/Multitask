@@ -1,3 +1,4 @@
+// import functions
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './hooks/useAuth';
 import { SyncProvider } from './hooks/useSync';
@@ -6,12 +7,14 @@ import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import Kanban from './pages/Kanban';
 import Notation from './pages/Notation';
+import Graph from './pages/Graph';
 import UserProfile from './pages/UserProfile';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import TermsOfService from './pages/TermsOfService';
 import Settings from './pages/Settings';
-import Navbar from './components/Navbar'; // Update path if needed
+import Navbar from './components/Navbar';
 
+// state variables
 export const appName = Object.freeze("Example App Name");
 
 // routing components
@@ -38,6 +41,8 @@ function AppRoutes() {
                 
                 <Route path="/workspace/:workspaceID/kanban"   element={<PrivateRoute><Kanban /></PrivateRoute>} />
                 <Route path="/workspace/:workspaceID/notation" element={<PrivateRoute><Notation /></PrivateRoute>} />
+                <Route path="/workspace/:workspaceID/graph"    element={<PrivateRoute><Graph /></PrivateRoute>} />
+                
                 <Route path="*" element={<Navigate to={user ? '/dashboard' : '/login'} replace />} />
             </Routes>
         </>

@@ -1,24 +1,4 @@
-// Canvas actions — pan, move, draw, resize, connect.
-// Each action implements the contract:
-//
-//   {
-//     name:     string,                            unique identifier
-//     priority: number,                            higher runs first in tryStart loop
-//     tryStart: (ctx, evt) => dragStart | null,    returns payload to attach, or null to pass
-//     onMove?:  (ctx, dragStart, evt) => void,     called every pointer-move
-//     onEnd?:   (ctx, dragStart, evt, opts) => void,  called on pointer-up; opts.cancelled if cancelled
-//     getCursor?: (ctx, dragStart) => string,      cursor while this action is active
-//   }
-//
-// `ctx` is the dispatcher's context object — shape lives in useCanvasPointer.js.
-// Actions never hold their own state between calls. Anything stateful is in dragStart.
-//
-// Priority bands:
-//   100s = always-on / button-based (middle-mouse pan)
-//   50s  = tool-specific (hand pan, select-resize, select-move, arrow-connect, draw)
-//   any unhandled fallback → tool default
-//
-// `evt` shape: { worldX, worldY, screenX, screenY, button, native, shiftKey }
+
 
 import {
     isHittingEdge,

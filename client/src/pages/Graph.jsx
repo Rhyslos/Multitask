@@ -1,26 +1,58 @@
 // import functions
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
+import { useAuth } from '../hooks/useAuth';
 import GraphSubbar from '../components/subbar/GraphSubbar';
 import GraphCanvas from '../components/graph/GraphCanvas';
 import GraphSidePanel from '../components/graph/GraphSidePanel';
 import { buildExecutionOrder, isNodeType } from '../components/graph/GraphHelper';
+import useGraphSync from '../hooks/useGraphSync';
+import useElementsView from '../hooks/useElementsView';
+import useLocalOverrides, { applyOverrides } from '../hooks/useLocalOverrides';
+import useAwareness from '../hooks/useAwareness';
+import { makeGraphMutator } from '../components/graph/graphMutator';
 
 // component functions
 export default function Graph() {
     const { workspaceID } = useParams();
+    const { user } = useAuth();
     const [activeMode, setActiveMode] = useState('whiteboard');
     const [activeTool, setActiveTool] = useState('select');
 
-    const [elements, setElements] = useState([]);
-    const [selectedId, setSelectedId] = useState(null);
+    // Yjs document + provider for this workspace.
+    const { doc, yElements, awareness, connected, clientId } = useGraphSync(workspaceID, user);
+
+    // Plain-array snapshot of yElements for the renderer.
+    const ySnapshot = useElementsView(yElements);
+
+    // Local overrides for in-flight drags (instant feedback without flooding network).
+    const { overrides, localState } = useLocalOverrides();
+
+    // What the renderer actually draws: yElements snapshot with overrides applied.
+    const elements = useMemo(() => applyOverrides(ySnapshot, overrides), [ySnapshot, overrides]);
+
+    // Mutator: the only way GraphActions writes to elements.
+    const mutator = useMemo(() => {
+        if (!doc || !yElements) return null;
+        return makeGraphMutator(doc, yElements, localState);
+    }, [doc, yElements, localState]);
+
+    // Awareness: cursors + remote selection rings.
+    const { peers, broadcastCursor, broadcastSelection } = useAwareness(awareness, clientId);
+
+    const [selectedId, setSelectedIdRaw] = useState(null);
+    const setSelectedId = useMemo(() => (id) => {
+        setSelectedIdRaw(id);
+        broadcastSelection(id);
+    }, [broadcastSelection]);
+
     const [starterId, setStarterId] = useState(null);
 
     // execution state
     const [isRunning, setIsRunning] = useState(false);
     const [speed, setSpeed] = useState(600);
     const [executionSteps, setExecutionSteps] = useState([]);
-    const [stepIndex, setStepIndex] = useState(-1); // -1 = not started; otherwise highest revealed step
+    const [stepIndex, setStepIndex] = useState(-1);
     const intervalRef = useRef(null);
 
     // ids highlighted on the canvas right now (everything up to and including stepIndex)
@@ -34,12 +66,10 @@ export default function Graph() {
         return set;
     }, [executionSteps, stepIndex]);
 
-    // stop execution if mode changes or starter goes missing
     useEffect(() => {
         if (activeMode !== 'dataChart' && isRunning) handleStop();
     }, [activeMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // run the stepper
     useEffect(() => {
         if (!isRunning) return;
         intervalRef.current = setInterval(() => {
@@ -58,7 +88,6 @@ export default function Graph() {
 
     const handlePlay = () => {
         if (!starterId) {
-            // soft message — could be replaced with a toast
             alert('Pick a node and click "Set as Starter" first.');
             return;
         }
@@ -120,19 +149,27 @@ export default function Graph() {
                 <div style={{ position: 'absolute', top: 20, left: 20, color: '#aaa', zIndex: 10, pointerEvents: 'none' }}>
                     Workspace: {workspaceID} | Mode: {activeMode} | Tool: {activeTool}
                     {starterId && <> | Starter: ✓</>}
+                    {' | '}
+                    <span style={{ color: connected ? '#10b981' : '#ef4444' }}>
+                        {connected ? '● live' : '● offline'}
+                    </span>
                 </div>
 
                 <div style={{ flex: 1, position: 'relative' }}>
-                    <GraphCanvas
-                        activeTool={activeTool}
-                        activeMode={activeMode}
-                        elements={elements}
-                        setElements={setElements}
-                        selectedId={selectedId}
-                        setSelectedId={setSelectedId}
-                        starterId={starterId}
-                        highlightedIds={highlightedIds}
-                    />
+                    {mutator && (
+                        <GraphCanvas
+                            activeTool={activeTool}
+                            activeMode={activeMode}
+                            elements={elements}
+                            mutator={mutator}
+                            selectedId={selectedId}
+                            setSelectedId={setSelectedId}
+                            starterId={starterId}
+                            highlightedIds={highlightedIds}
+                            peers={peers}
+                            broadcastCursor={broadcastCursor}
+                        />
+                    )}
                 </div>
 
                 {showSidePanel && (

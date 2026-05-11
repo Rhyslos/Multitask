@@ -1,5 +1,4 @@
 import { WebSocketServer } from 'ws';
-import { setupWSConnection } from 'y-websocket/bin/utils';
 import express from 'express';
 import cors from 'cors';
 import { initializeDatabase } from './database/db.mjs';
@@ -10,6 +9,7 @@ import createNotesRouter from './api/notesAPI.mjs';
 import createSyncRouter from './api/syncAPI.mjs';
 import createInvitesRouter from './api/invitesAPI.mjs';
 import createNetworkingRouter from './modules/networking.mjs';
+import { attachGraphSync } from './modules/graphSync.mjs';
 
 export class KanbanServer {
     constructor() {
@@ -40,24 +40,23 @@ export class KanbanServer {
         }));
     }
 
-    start() {
+    async start() {
         const server = this.app.listen(this.port, () => {
             console.log(`Backend server running on http://localhost:${this.port}`);
         });
 
+        // The Yjs WS endpoint shares the HTTP server. Room name = URL path =
+        // workspace ID. attachGraphSync handles persistence + workspace-member
+        // auth before delegating to y-websocket's setupWSConnection.
         const wss = new WebSocketServer({ server });
-
-        wss.on('connection', (conn, req) => {
-            console.log(`[YJS] Client connected to room: ${req.url}`);
-            setupWSConnection(conn, req, { gc: true });
-        });
+        await attachGraphSync(wss, this.db);
     }
 }
 
 async function run() {
     const server = new KanbanServer();
     await server.initialize();
-    server.start();
+    await server.start();
 }
 
 run();

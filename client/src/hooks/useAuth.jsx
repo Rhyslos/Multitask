@@ -97,7 +97,10 @@ export function AuthProvider({ children }) {
         }
     }
 
-    async function register(email, password, countryIso) {
+    // register now requires displayName — it's shown on live cursors, the profile,
+    // and anywhere else a user is identified in the UI. Register.jsx validates and
+    // trims before calling, so we trust the value here and pass it straight through.
+    async function register(email, password, countryIso, displayName) {
         const res = await fetch(`${API}/users/register`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -105,6 +108,7 @@ export function AuthProvider({ children }) {
                 email,
                 password,
                 countryIso,
+                displayName,
             }),
         });
 

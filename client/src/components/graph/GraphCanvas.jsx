@@ -3,6 +3,7 @@ import { useRef, useLayoutEffect, useState } from 'react';
 import { renderCanvas } from './GraphRenderer';
 import useCanvasCamera from '../../hooks/useCanvasCamera';
 import useCanvasPointer from '../../hooks/useCanvasPointer';
+import useInterpolatedCursors from '../../hooks/useInterpolatedCursors';
 import ZoomBadge from './ZoomBadge';
 import { isHittingEdge, isNodeType, getNodeBounds } from './GraphHelper';
 
@@ -10,17 +11,24 @@ export default function GraphCanvas({
     activeTool,
     activeMode,
     elements,
-    setElements,
+    mutator,
     selectedId,
     setSelectedId,
     starterId,
     highlightedIds,
+    peers,              // raw peers from useAwareness — discrete samples
+    broadcastCursor,
 }) {
     const canvasRef = useRef(null);
     const [editingText, setEditingText] = useState(null);
     const [pendingConnection, setPendingConnection] = useState(null);
 
     const { camera, setCamera, screenToWorld, resetView } = useCanvasCamera(canvasRef);
+
+    // Smoothed peers. `tick` increments every animated frame while any peer
+    // is mid-ease; including it in the render effect's dep array drives the
+    // canvas redraw on each frame of the animation.
+    const { peersForRender, tick } = useInterpolatedCursors(peers, elements);
 
     const {
         handlePointerDown,
@@ -34,12 +42,14 @@ export default function GraphCanvas({
         isActive,
     } = useCanvasPointer({
         canvasRef,
-        elements, setElements,
+        elements,
+        mutator,
         selectedId, setSelectedId,
         camera, setCamera, screenToWorld,
         activeTool,
         editingText,
         setPendingConnection,
+        broadcastCursor,
     });
 
     useLayoutEffect(() => {
@@ -58,9 +68,14 @@ export default function GraphCanvas({
             hoverNodeId,
             action: pendingConnection ? 'connecting' : null,
             pendingConnection,
-            hoverEdgeNodeId
+            hoverEdgeNodeId,
+            peers: peersForRender,
         });
-    }, [camera, elements, selectedId, starterId, highlightedIds, activeTool, hoverNodeId, pendingConnection, hoverEdgeNodeId]);
+    }, [
+        camera, elements, selectedId, starterId, highlightedIds, activeTool,
+        hoverNodeId, pendingConnection, hoverEdgeNodeId,
+        peersForRender, tick,
+    ]);
 
     const handleCanvasPointerDown = (e) => {
         if (activeTool === 'text' && !isActive() && !editingText) {
@@ -69,7 +84,7 @@ export default function GraphCanvas({
             const { x: worldX, y: worldY } = screenToWorld(offsetX, offsetY);
             setEditingText({
                 mode: 'newText',
-                id: Date.now().toString(),
+                id: crypto.randomUUID(),
                 type: 'text',
                 x: worldX, y: worldY,
                 text: '',
@@ -91,9 +106,9 @@ export default function GraphCanvas({
 
         e.preventDefault();
         const b = getNodeBounds(hit);
-        
+
         if (hit.type === 'text') {
-             setEditingText({
+            setEditingText({
                 mode: 'editLabel',
                 targetId: hit.id,
                 x: hit.x,
@@ -103,7 +118,7 @@ export default function GraphCanvas({
                 isTextNode: true,
             });
         } else {
-             setEditingText({
+            setEditingText({
                 mode: 'editLabel',
                 targetId: hit.id,
                 x: b.minX,
@@ -117,7 +132,7 @@ export default function GraphCanvas({
     };
 
     const handleTextBlur = () => {
-        if (!editingText) return;
+        if (!editingText || !mutator) return;
 
         if (editingText.mode === 'newText') {
             if (editingText.text.trim()) {
@@ -125,20 +140,21 @@ export default function GraphCanvas({
                 ctx.font = '16px Arial, sans-serif';
                 const metrics = ctx.measureText(editingText.text);
                 const { mode, ...persisted } = editingText;
-                setElements(prev => [...prev, { ...persisted, width: metrics.width, height: 16 }]);
+                mutator.create({ ...persisted, width: metrics.width, height: 16 });
             }
         } else if (editingText.mode === 'editLabel') {
             const newText = editingText.text.trim();
-            setElements(prev => prev.map(el => {
-                if (el.id !== editingText.targetId) return el;
-                if (el.type === 'text') {
+            const target = elements.find(el => el.id === editingText.targetId);
+            if (target) {
+                if (target.type === 'text') {
                     const ctx = canvasRef.current.getContext('2d');
                     ctx.font = '16px Arial, sans-serif';
                     const metrics = ctx.measureText(newText);
-                    return { ...el, text: newText, width: metrics.width };
+                    mutator.update(target.id, { text: newText, width: metrics.width });
+                } else {
+                    mutator.update(target.id, { label: newText || undefined });
                 }
-                return { ...el, label: newText || undefined };
-            }));
+            }
         }
         setEditingText(null);
     };

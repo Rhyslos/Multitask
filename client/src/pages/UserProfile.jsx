@@ -1,9 +1,12 @@
 import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import 'flag-icons/css/flag-icons.min.css';
-import { COUNTRIES, GENDER_OPTIONS, formatPhoneNumber } from '../components/international/constants';
+import { COUNTRIES, formatPhoneNumber } from '../components/international/constants';
 
 const API = 'http://localhost:8080/api';
+
+const DISPLAY_NAME_MIN = 2;
+const DISPLAY_NAME_MAX = 32;
 
 // input helper functions
 function InternalCountrySelect({ value, onChange }) {
@@ -83,14 +86,14 @@ function PrivacySelector({ value, onChange }) {
         <select
             value={value || 'public'}
             onChange={e => onChange(e.target.value)}
-            style={{ 
-                marginLeft: 'auto', 
-                fontSize: '0.75rem', 
-                padding: '2px 4px', 
-                borderRadius: '4px', 
-                background: 'transparent', 
-                color: 'var(--muted)', 
-                border: '1px solid var(--border)' 
+            style={{
+                marginLeft: 'auto',
+                fontSize: '0.75rem',
+                padding: '2px 4px',
+                borderRadius: '4px',
+                background: 'transparent',
+                color: 'var(--muted)',
+                border: '1px solid var(--border)'
             }}
         >
             <option value="public">Public</option>
@@ -111,15 +114,6 @@ export default function UserProfile() {
     const [email, setEmail] = useState(user?.email || '');
     const [countryIso, setCountryIso] = useState(user?.countryIso || 'us');
     const [phoneNumber, setPhoneNumber] = useState(user?.phoneNumber || '');
-    const [gender, setGender] = useState(user?.gender || '');
-    
-    const [skillset, setSkillset] = useState(() => {
-        try {
-            return user?.skillset ? JSON.parse(user.skillset) : [''];
-        } catch {
-            return [''];
-        }
-    });
 
     const [privacySettings, setPrivacySettings] = useState(() => {
         try {
@@ -141,6 +135,10 @@ export default function UserProfile() {
     const [profileMessage, setProfileMessage] = useState({ type: '', text: '' });
     const [passwordMessage, setPasswordMessage] = useState({ type: '', text: '' });
 
+    // Surfaced as the field's own error line so users see it next to the
+    // input, not just in the bottom message. Cleared on edit or successful save.
+    const [displayNameError, setDisplayNameError] = useState('');
+
     // effect handler functions
     useEffect(() => {
         if (user) {
@@ -150,16 +148,10 @@ export default function UserProfile() {
             setEmail(user.email || '');
             setCountryIso(user.countryIso || 'us');
             setPhoneNumber(user.phoneNumber || '');
-            setGender(user.gender || '');
-            try {
-                setSkillset(user.skillset ? JSON.parse(user.skillset) : ['']);
-            } catch {
-                setSkillset(['']);
-            }
             try {
                 if (user.privacySettings) {
-                    setPrivacySettings(typeof user.privacySettings === 'string' 
-                        ? JSON.parse(user.privacySettings) 
+                    setPrivacySettings(typeof user.privacySettings === 'string'
+                        ? JSON.parse(user.privacySettings)
                         : user.privacySettings);
                 }
             } catch {
@@ -171,8 +163,6 @@ export default function UserProfile() {
     // data mapping functions
     const selectedCountry = COUNTRIES.find(c => c.iso === countryIso.toLowerCase()) || COUNTRIES.find(c => c.iso === 'us');
 
-    const primaryNameDisplay = displayName.trim() || ((firstName.trim() || lastName.trim()) ? `${firstName} ${lastName}`.trim() : email);
-
     // event handler functions
     function handleCountryChange(iso) {
         if (iso !== countryIso) {
@@ -181,45 +171,48 @@ export default function UserProfile() {
         }
     }
 
-    function handleSkillChange(index, value) {
-        const newSkills = [...skillset];
-        newSkills[index] = value;
-        setSkillset(newSkills);
-    }
-
-    function addSkillField() {
-        setSkillset([...skillset, '']);
-    }
-
-    function removeSkillField(index) {
-        const newSkills = skillset.filter((_, i) => i !== index);
-        setSkillset(newSkills.length ? newSkills : ['']);
-    }
-
     function handlePrivacyChange(field, value) {
         setPrivacySettings(prev => ({ ...prev, [field]: value }));
+    }
+
+    function handleDisplayNameChange(e) {
+        setDisplayName(e.target.value);
+        if (displayNameError) setDisplayNameError('');
+    }
+
+    function validateDisplayName(value) {
+        const trimmed = value.trim();
+        if (!trimmed) return 'Display name is required.';
+        if (trimmed.length < DISPLAY_NAME_MIN) return `Display name must be at least ${DISPLAY_NAME_MIN} characters.`;
+        if (trimmed.length > DISPLAY_NAME_MAX) return `Display name must be at most ${DISPLAY_NAME_MAX} characters.`;
+        return '';
     }
 
     // api submission functions
     async function handleProfileUpdate(e) {
         e.preventDefault();
+
+        const nameError = validateDisplayName(displayName);
+        if (nameError) {
+            setDisplayNameError(nameError);
+            setProfileMessage({ type: 'error', text: nameError });
+            return;
+        }
+
         setProfileLoading(true);
         setProfileMessage({ type: '', text: '' });
 
         try {
-            const filteredSkills = skillset.filter(skill => skill.trim() !== '');
             const res = await fetch(`${API}/users/${user.id}/profile`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    displayName,
+                    displayName: displayName.trim(),
                     firstName,
                     lastName,
                     email,
                     countryIso,
                     phoneNumber,
-                    skillset: filteredSkills,
-                    gender,
                     privacySettings: JSON.stringify(privacySettings)
                 }),
             });
@@ -295,17 +288,43 @@ export default function UserProfile() {
                 <div className="profile-content">
                     <div className="profile-section">
                         <h2 className="profile-section-title">Personal Information</h2>
-                        <form className="profile-form" onSubmit={handleProfileUpdate}>
-                            
+                        <form className="profile-form" onSubmit={handleProfileUpdate} noValidate>
+
                             <div className="profile-field">
-                                <label htmlFor="displayName">Display Name (Username)</label>
+                                <label htmlFor="displayName">
+                                    Display Name (Username) <span className="profile-required">*</span>
+                                </label>
                                 <input
                                     id="displayName"
                                     type="text"
                                     value={displayName}
-                                    onChange={e => setDisplayName(e.target.value)}
+                                    onChange={handleDisplayNameChange}
+                                    onBlur={() => {
+                                        const err = validateDisplayName(displayName);
+                                        if (err) setDisplayNameError(err);
+                                    }}
                                     placeholder="e.g., CoolCollaborator99"
+                                    minLength={DISPLAY_NAME_MIN}
+                                    maxLength={DISPLAY_NAME_MAX}
+                                    required
+                                    aria-invalid={!!displayNameError}
+                                    aria-describedby="displayName-help displayName-error"
                                 />
+                                <span
+                                    id="displayName-help"
+                                    style={{ fontSize: '0.8rem', color: 'var(--muted)', marginTop: '4px' }}
+                                >
+                                    Shown to collaborators on shared boards and live cursors. Required.
+                                </span>
+                                {displayNameError && (
+                                    <span
+                                        id="displayName-error"
+                                        className="profile-message profile-message--error"
+                                        style={{ marginTop: '4px' }}
+                                    >
+                                        {displayNameError}
+                                    </span>
+                                )}
                             </div>
 
                             <div className="profile-field" style={{ marginBottom: '8px' }}>
@@ -339,7 +358,12 @@ export default function UserProfile() {
                             </div>
 
                             <div className="profile-field">
-                                <label htmlFor="email">Email <span className="profile-required">*</span></label>
+                                <div style={{ display: 'flex', alignItems: 'center' }}>
+                                    <label htmlFor="email" style={{ margin: 0 }}>
+                                        Email <span className="profile-required">*</span>
+                                    </label>
+                                    <PrivacySelector value={privacySettings.email} onChange={v => handlePrivacyChange('email', v)} />
+                                </div>
                                 <input
                                     id="email"
                                     type="email"
@@ -350,76 +374,24 @@ export default function UserProfile() {
                                 />
                             </div>
 
-                            <div className="profile-row">
-                                <div className="profile-field profile-phone-field">
-                                    <div style={{ display: 'flex', alignItems: 'center' }}>
-                                        <label>Phone Number</label>
-                                        <PrivacySelector value={privacySettings.phoneNumber} onChange={v => handlePrivacyChange('phoneNumber', v)} />
-                                    </div>
-                                    <div className="profile-phone-group">
-                                        <InternalCountrySelect value={countryIso} onChange={handleCountryChange} />
-                                        <input
-                                            type="tel"
-                                            value={phoneNumber}
-                                            onChange={e => {
-                                                const digits = e.target.value.replace(/\D/g, '').slice(0, selectedCountry.digits);
-                                                setPhoneNumber(formatPhoneNumber(digits, selectedCountry.format));
-                                            }}
-                                            placeholder={selectedCountry.format.replace(/X/g, '0')}
-                                            autoComplete="tel-national"
-                                        />
-                                    </div>
+                            <div className="profile-field profile-phone-field">
+                                <div style={{ display: 'flex', alignItems: 'center' }}>
+                                    <label>Phone Number</label>
+                                    <PrivacySelector value={privacySettings.phoneNumber} onChange={v => handlePrivacyChange('phoneNumber', v)} />
                                 </div>
-                                <div className="profile-field">
-                                    <div style={{ display: 'flex', alignItems: 'center' }}>
-                                        <label htmlFor="gender">Gender (Optional)</label>
-                                        <PrivacySelector value={privacySettings.gender} onChange={v => handlePrivacyChange('gender', v)} />
-                                    </div>
-                                    <select
-                                        id="gender"
-                                        value={gender}
-                                        onChange={e => setGender(e.target.value)}
-                                        className="profile-select"
-                                    >
-                                        <option value="" disabled>Select...</option>
-                                        {GENDER_OPTIONS.map(opt => (
-                                            <option key={opt} value={opt}>{opt}</option>
-                                        ))}
-                                    </select>
+                                <div className="profile-phone-group">
+                                    <InternalCountrySelect value={countryIso} onChange={handleCountryChange} />
+                                    <input
+                                        type="tel"
+                                        value={phoneNumber}
+                                        onChange={e => {
+                                            const digits = e.target.value.replace(/\D/g, '').slice(0, selectedCountry.digits);
+                                            setPhoneNumber(formatPhoneNumber(digits, selectedCountry.format));
+                                        }}
+                                        placeholder={selectedCountry.format.replace(/X/g, '0')}
+                                        autoComplete="tel-national"
+                                    />
                                 </div>
-                            </div>
-
-                            <div className="profile-field">
-                                <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
-                                    <label style={{ margin: 0 }}>Skillset</label>
-                                    <PrivacySelector value={privacySettings.skillset} onChange={v => handlePrivacyChange('skillset', v)} />
-                                </div>
-                                {skillset.map((skill, index) => (
-                                    <div key={index} style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-                                        <input
-                                            type="text"
-                                            value={skill}
-                                            onChange={e => handleSkillChange(index, e.target.value)}
-                                            placeholder="e.g., React, Graphic Design, Python"
-                                        />
-                                        <button 
-                                            type="button" 
-                                            onClick={() => removeSkillField(index)}
-                                            className="profile-btn"
-                                            style={{ marginTop: 0 }}
-                                        >
-                                            ✕
-                                        </button>
-                                    </div>
-                                ))}
-                                <button 
-                                    type="button" 
-                                    onClick={addSkillField} 
-                                    className="profile-btn"
-                                    style={{ width: 'fit-content' }}
-                                >
-                                    + Add Skill
-                                </button>
                             </div>
 
                             <div className="profile-field">

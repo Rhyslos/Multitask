@@ -13,25 +13,33 @@ const SORTED_ACTIONS = [...ALL_ACTIONS].sort((a, b) => b.priority - a.priority);
 
 export default function useCanvasPointer({
     canvasRef,
-    elements, setElements,
+    elements,
+    mutator,
     selectedId, setSelectedId,
     camera, setCamera, screenToWorld,
     activeTool,
     editingText,
     setPendingConnection,
+    broadcastCursor,
 }) {
     const [hoverNodeId, setHoverNodeId] = useState(null);
-    const [hoverHandle, setHoverHandle] = useState(null); 
-    const [hoverLabelNodeId, setHoverLabelNodeId] = useState(null); 
+    const [hoverHandle, setHoverHandle] = useState(null);
+    const [hoverLabelNodeId, setHoverLabelNodeId] = useState(null);
     const [hoverEdgeNodeId, setHoverEdgeNodeId] = useState(null);
 
-    const activeRef = useRef(null);    
+    const activeRef = useRef(null);
     const [activeCursor, setActiveCursor] = useState(null);
+
+    // Last seen pointer position + modifier state, kept fresh so we can replay
+    // an onMove when the user presses/releases shift mid-drag. Without this,
+    // shift-constrain only takes effect on the next physical pointer move.
+    const lastEvtRef = useRef(null);
 
     const ctxRef = useRef({});
     ctxRef.current = {
         elements, selectedId, camera, activeTool,
-        setElements, setSelectedId, setCamera, setPendingConnection,
+        mutator,
+        setSelectedId, setCamera, setPendingConnection,
     };
 
     const buildEvt = useCallback((nativeEvent) => {
@@ -62,9 +70,10 @@ export default function useCanvasPointer({
 
     const handlePointerDown = useCallback((e) => {
         if (editingText) return;
-        if (activeRef.current) return; 
+        if (activeRef.current) return;
 
         const evt = buildEvt(e.nativeEvent);
+        lastEvtRef.current = evt;
         for (const action of SORTED_ACTIONS) {
             const dragStart = action.tryStart(ctxRef.current, evt);
             if (dragStart != null) {
@@ -80,6 +89,11 @@ export default function useCanvasPointer({
 
     const handlePointerMove = useCallback((e) => {
         const evt = buildEvt(e.nativeEvent);
+        lastEvtRef.current = evt;
+
+        if (broadcastCursor) {
+            broadcastCursor(evt.worldX, evt.worldY);
+        }
 
         if (activeRef.current) {
             activeRef.current.action.onMove?.(ctxRef.current, activeRef.current.dragStart, evt);
@@ -130,11 +144,12 @@ export default function useCanvasPointer({
         }
         if (edgeHitId !== hoverEdgeNodeId) setHoverEdgeNodeId(edgeHitId);
 
-    }, [buildEvt, activeTool, elements, selectedId, hoverNodeId, hoverHandle, hoverLabelNodeId, hoverEdgeNodeId]);
+    }, [buildEvt, broadcastCursor, activeTool, elements, selectedId, hoverNodeId, hoverHandle, hoverLabelNodeId, hoverEdgeNodeId]);
 
     const handlePointerUp = useCallback((e) => {
         if (!activeRef.current) return;
         const evt = buildEvt(e.nativeEvent);
+        lastEvtRef.current = evt;
         finishAction(evt);
         try {
             e.currentTarget.releasePointerCapture(e.pointerId);
@@ -142,8 +157,25 @@ export default function useCanvasPointer({
     }, [buildEvt, finishAction]);
 
     useEffect(() => {
+        const replayActiveMove = (shiftKey) => {
+            // Re-fire onMove with the last known pointer position but the
+            // updated shift state. Lets shift-to-constrain toggle live during
+            // an in-progress drag without waiting for the next pointer event.
+            const active = activeRef.current;
+            const last = lastEvtRef.current;
+            if (!active || !last) return;
+            const synthetic = { ...last, shiftKey };
+            lastEvtRef.current = synthetic;
+            active.action.onMove?.(ctxRef.current, active.dragStart, synthetic);
+        };
+
         const handleKeyDown = (e) => {
             if (editingText) return;
+
+            if (e.key === 'Shift' && activeRef.current) {
+                replayActiveMove(true);
+                return;
+            }
 
             if (e.key === 'Escape' && activeRef.current) {
                 cancel();
@@ -151,16 +183,30 @@ export default function useCanvasPointer({
             }
 
             if ((e.key === 'Backspace' || e.key === 'Delete') && selectedId) {
-                setElements(prev => prev.filter(el =>
-                    el.id !== selectedId &&
-                    !(el.type === 'arrow' && (el.fromId === selectedId || el.toId === selectedId))
-                ));
+                const idsToRemove = [selectedId];
+                for (const el of elements) {
+                    if (el.type === 'arrow' && (el.fromId === selectedId || el.toId === selectedId)) {
+                        idsToRemove.push(el.id);
+                    }
+                }
+                mutator.removeMany(idsToRemove);
                 setSelectedId(null);
             }
         };
+
+        const handleKeyUp = (e) => {
+            if (e.key === 'Shift' && activeRef.current) {
+                replayActiveMove(false);
+            }
+        };
+
         window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [editingText, selectedId, setElements, setSelectedId, cancel]);
+        window.addEventListener('keyup', handleKeyUp);
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown);
+            window.removeEventListener('keyup', handleKeyUp);
+        };
+    }, [editingText, selectedId, elements, mutator, setSelectedId, cancel]);
 
     return {
         handlePointerDown,

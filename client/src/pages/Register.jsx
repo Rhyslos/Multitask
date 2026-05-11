@@ -5,10 +5,14 @@ import { useAuth } from '../hooks/useAuth';
 import { appName } from '../App';
 import CountrySelect from '../components/international/CountrySelect';
 
+const DISPLAY_NAME_MIN = 2;
+const DISPLAY_NAME_MAX = 32;
+
 export default function Register() {
     const { register } = useAuth();
     const navigate = useNavigate();
 
+    const [displayName, setDisplayName] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [agreedToTerms, setAgreedToTerms] = useState(false);
@@ -21,6 +25,20 @@ export default function Register() {
         e.preventDefault();
         setError('');
 
+        // Display name is required everywhere it's shown (profile, live cursors,
+        // etc.) so we enforce the same 2–32 char rule at signup. Trim before
+        // measuring so "   a   " doesn't sneak through as length 7.
+        const trimmedName = displayName.trim();
+        if (!trimmedName) {
+            return setError('Please choose a display name.');
+        }
+        if (trimmedName.length < DISPLAY_NAME_MIN) {
+            return setError(`Display name must be at least ${DISPLAY_NAME_MIN} characters.`);
+        }
+        if (trimmedName.length > DISPLAY_NAME_MAX) {
+            return setError(`Display name must be at most ${DISPLAY_NAME_MAX} characters.`);
+        }
+
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(email)) {
             return setError('Please enter a valid email address (e.g., name@example.com).');
@@ -28,7 +46,7 @@ export default function Register() {
 
         setLoading(true);
         try {
-            await register(email, password, countryIso);
+            await register(email, password, countryIso, trimmedName);
             navigate('/dashboard');
         } catch (err) {
             setError(err.message);
@@ -57,6 +75,22 @@ export default function Register() {
                 </div>
 
                 <form className="auth-form" onSubmit={handleSubmit} noValidate>
+                    <div className="auth-field">
+                        <label htmlFor="displayName">Display Name</label>
+                        <input
+                            id="displayName"
+                            type="text"
+                            autoComplete="username"
+                            placeholder="e.g., CoolCollaborator99"
+                            value={displayName}
+                            onChange={e => setDisplayName(e.target.value)}
+                            disabled={loading}
+                            minLength={DISPLAY_NAME_MIN}
+                            maxLength={DISPLAY_NAME_MAX}
+                            required
+                        />
+                    </div>
+
                     <div className="auth-field">
                         <label htmlFor="email">Email</label>
                         <input
@@ -93,17 +127,17 @@ export default function Register() {
                     </div>
 
                     <div className="auth-checkbox-group">
-                        <input 
-                            type="checkbox" 
-                            id="terms" 
+                        <input
+                            type="checkbox"
+                            id="terms"
                             checked={agreedToTerms}
                             onChange={e => setAgreedToTerms(e.target.checked)}
                             disabled={loading}
                         />
                         <label htmlFor="terms" className="auth-checkbox-label">
-                            I have read and agree to the 
+                            I have read and agree to the
                             <Link to="/tos" className="auth-link" style={{ fontSize: '12px', margin: '0 4px' }}>Terms of Service</Link>
-                            and 
+                            and
                             <Link to="/privacy" className="auth-link" style={{ fontSize: '12px', margin: '0 4px' }}>Privacy Policy</Link>.
                         </label>
                     </div>
@@ -113,7 +147,7 @@ export default function Register() {
                     <button
                         type="submit"
                         className="auth-btn"
-                        disabled={loading || !email || !password || !agreedToTerms}
+                        disabled={loading || !displayName || !email || !password || !agreedToTerms}
                     >
                         {loading ? 'Creating account…' : 'Create account'}
                     </button>

@@ -60,9 +60,6 @@ export default function GraphSubbar({
                         >
                             <option value="whiteboard">Whiteboard</option>
                             <option value="dataChart">Data Chart</option>
-                            <option value="dependency">Dependency Chart</option>
-                            <option value="bpmn">BPMN</option>
-                            <option value="uml">UML</option>
                         </select>
                     </div>
                 </div>

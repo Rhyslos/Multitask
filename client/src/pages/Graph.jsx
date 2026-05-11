@@ -12,12 +12,22 @@ import useLocalOverrides, { applyOverrides } from '../hooks/useLocalOverrides';
 import useAwareness from '../hooks/useAwareness';
 import { makeGraphMutator } from '../components/graph/graphMutator';
 
+// Only these two modes are supported. Anything else gets clamped to 'whiteboard'.
+const VALID_MODES = ['whiteboard', 'dataChart'];
+
 // component functions
 export default function Graph() {
     const { workspaceID } = useParams();
     const { user } = useAuth();
-    const [activeMode, setActiveMode] = useState('whiteboard');
+    const [activeMode, setActiveModeRaw] = useState('whiteboard');
     const [activeTool, setActiveTool] = useState('select');
+
+    // Guard against legacy persisted state or a subbar that hasn't been
+    // updated yet — if anything tries to set an unknown mode, snap back to
+    // whiteboard rather than entering a broken state.
+    const setActiveMode = useMemo(() => (m) => {
+        setActiveModeRaw(VALID_MODES.includes(m) ? m : 'whiteboard');
+    }, []);
 
     // Yjs document + provider for this workspace.
     const { doc, yElements, awareness, connected, clientId } = useGraphSync(workspaceID, user);
@@ -40,6 +50,11 @@ export default function Graph() {
     // Awareness: cursors + remote selection rings.
     const { peers, broadcastCursor, broadcastSelection } = useAwareness(awareness, clientId);
 
+    // Clipboard for the canvas right-click "Paste here" action. Held at this
+    // level (rather than inside GraphCanvas) so duplicate / copy-style flows
+    // outside the canvas can share it later if needed.
+    const [clipboard, setClipboard] = useState(null);
+
     const [selectedId, setSelectedIdRaw] = useState(null);
     const setSelectedId = useMemo(() => (id) => {
         setSelectedIdRaw(id);
@@ -55,7 +70,6 @@ export default function Graph() {
     const [stepIndex, setStepIndex] = useState(-1);
     const intervalRef = useRef(null);
 
-    // ids highlighted on the canvas right now (everything up to and including stepIndex)
     const highlightedIds = useMemo(() => {
         const set = new Set();
         if (stepIndex < 0) return set;
@@ -168,6 +182,8 @@ export default function Graph() {
                             highlightedIds={highlightedIds}
                             peers={peers}
                             broadcastCursor={broadcastCursor}
+                            clipboard={clipboard}
+                            setClipboard={setClipboard}
                         />
                     )}
                 </div>

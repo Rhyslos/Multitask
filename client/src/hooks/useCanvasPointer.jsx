@@ -21,6 +21,7 @@ export default function useCanvasPointer({
     editingText,
     setPendingConnection,
     broadcastCursor,
+    suppressHover = false,    // pause hover state mutations (e.g. while context menu is open)
 }) {
     const [hoverNodeId, setHoverNodeId] = useState(null);
     const [hoverHandle, setHoverHandle] = useState(null);
@@ -30,9 +31,6 @@ export default function useCanvasPointer({
     const activeRef = useRef(null);
     const [activeCursor, setActiveCursor] = useState(null);
 
-    // Last seen pointer position + modifier state, kept fresh so we can replay
-    // an onMove when the user presses/releases shift mid-drag. Without this,
-    // shift-constrain only takes effect on the next physical pointer move.
     const lastEvtRef = useRef(null);
 
     const ctxRef = useRef({});
@@ -71,6 +69,10 @@ export default function useCanvasPointer({
     const handlePointerDown = useCallback((e) => {
         if (editingText) return;
         if (activeRef.current) return;
+        // Right-click is handled by GraphCanvas.onContextMenu; left/middle
+        // proceed through the action priority chain. Buttons other than
+        // 0 / 1 are ignored.
+        if (e.nativeEvent.button !== 0 && e.nativeEvent.button !== 1) return;
 
         const evt = buildEvt(e.nativeEvent);
         lastEvtRef.current = evt;
@@ -99,6 +101,11 @@ export default function useCanvasPointer({
             activeRef.current.action.onMove?.(ctxRef.current, activeRef.current.dragStart, evt);
             return;
         }
+
+        // While a context menu is open, freeze hover hit-testing. This
+        // prevents hover styles from updating under the menu, which would
+        // cause visible flickering and pointless re-renders.
+        if (suppressHover) return;
 
         let labelHitId = null;
         for (let i = elements.length - 1; i >= 0; i--) {
@@ -144,7 +151,7 @@ export default function useCanvasPointer({
         }
         if (edgeHitId !== hoverEdgeNodeId) setHoverEdgeNodeId(edgeHitId);
 
-    }, [buildEvt, broadcastCursor, activeTool, elements, selectedId, hoverNodeId, hoverHandle, hoverLabelNodeId, hoverEdgeNodeId]);
+    }, [buildEvt, broadcastCursor, suppressHover, activeTool, elements, selectedId, hoverNodeId, hoverHandle, hoverLabelNodeId, hoverEdgeNodeId]);
 
     const handlePointerUp = useCallback((e) => {
         if (!activeRef.current) return;
@@ -158,9 +165,6 @@ export default function useCanvasPointer({
 
     useEffect(() => {
         const replayActiveMove = (shiftKey) => {
-            // Re-fire onMove with the last known pointer position but the
-            // updated shift state. Lets shift-to-constrain toggle live during
-            // an in-progress drag without waiting for the next pointer event.
             const active = activeRef.current;
             const last = lastEvtRef.current;
             if (!active || !last) return;

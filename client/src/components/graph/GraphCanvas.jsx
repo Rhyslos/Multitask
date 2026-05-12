@@ -1,4 +1,4 @@
-// user functions
+// imports
 import { useRef, useLayoutEffect, useState, useCallback } from 'react';
 import { renderCanvas } from './GraphRenderer';
 import useCanvasCamera from '../../hooks/useCanvasCamera';
@@ -8,6 +8,7 @@ import ZoomBadge from './ZoomBadge';
 import GraphContextMenu from './GraphContextMenu';
 import { isHittingEdge, isNodeType, getNodeBounds } from './GraphHelper';
 
+// main component
 export default function GraphCanvas({
     activeTool,
     elements,
@@ -22,12 +23,14 @@ export default function GraphCanvas({
     clipboard,
     setClipboard,
 }) {
+    // state and refs
     const canvasRef = useRef(null);
     const [editingText, setEditingText] = useState(null);
     const [pendingConnection, setPendingConnection] = useState(null);
     const [pendingMarquee, setPendingMarquee] = useState(null);
     const [contextMenu, setContextMenu] = useState(null);
 
+    // hooks
     const { camera, setCamera, screenToWorld, resetView } = useCanvasCamera(canvasRef);
 
     const { peersForRender, tick } = useInterpolatedCursors(peers, elements);
@@ -58,6 +61,7 @@ export default function GraphCanvas({
         suppressHover: !!contextMenu,
     });
 
+    // side effects
     useLayoutEffect(() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -85,6 +89,7 @@ export default function GraphCanvas({
         peersForRender, tick,
     ]);
 
+    // event handlers
     const handleContextMenu = useCallback((e) => {
         e.preventDefault();
         if (editingText || isActive()) return;
@@ -113,14 +118,13 @@ export default function GraphCanvas({
         }
     }, [editingText, isActive, elements, screenToWorld]);
 
-    // Right-click always operates on the clicked target — selection is
-    // untouched. Keyboard delete still hits the whole selection (in
-    // useCanvasPointer.jsx); that asymmetry is intentional.
+    // context menu selection helpers
     const operativeIds = () => {
         const id = contextMenu?.target?.id;
         return id ? [id] : [];
     };
 
+    // context menu actions
     const actions = {
         onDelete: () => {
             const ids = operativeIds();
@@ -153,9 +157,6 @@ export default function GraphCanvas({
         onBringForward: () => contextMenu?.target && mutator.bringForward(contextMenu.target.id),
         onSendBackward: () => contextMenu?.target && mutator.sendBackward(contextMenu.target.id),
         onSendToBack:   () => contextMenu?.target && mutator.sendToBack(contextMenu.target.id),
-        // Split out: stroke (line color) and fill (background) are independent.
-        // The menu picker calls these directly with hex strings or the
-        // NO_STROKE / NO_FILL sentinels from graphColors.
         onSetStroke: (hex) => {
             for (const id of operativeIds()) mutator.setStroke(id, hex);
         },
@@ -208,6 +209,7 @@ export default function GraphCanvas({
         },
     };
 
+    // pointer and input interactions
     const handleCanvasPointerDown = (e) => {
         if (contextMenu) setContextMenu(null);
 
@@ -302,6 +304,7 @@ export default function GraphCanvas({
         }
     };
 
+    // dynamic cursor selection
     let canvasCursor;
     if (activeCursor) {
         canvasCursor = activeCursor;
@@ -325,6 +328,7 @@ export default function GraphCanvas({
         canvasCursor = 'crosshair';
     }
 
+    // render
     return (
         <>
             <canvas

@@ -1,8 +1,8 @@
-// import functions
+// imports
 import { X } from 'lucide-react';
 import { getElementLabel } from './GraphHelper';
 
-// component functions
+// main component
 export default function GraphSidePanel({ steps, elements, currentIndex, onClose }) {
     const elementById = new Map(elements.map(el => [el.id, el]));
 

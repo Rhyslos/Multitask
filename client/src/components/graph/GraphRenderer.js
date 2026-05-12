@@ -1,4 +1,4 @@
-// user functions
+// imports
 import {
     drawElement,
     drawAnchorDots,
@@ -9,6 +9,7 @@ import {
     isNodeType,
 } from './GraphHelper';
 
+// main rendering routine
 export function renderCanvas(ctx, state) {
     const {
         width, height, camera, elements,
@@ -25,9 +26,6 @@ export function renderCanvas(ctx, state) {
     ctx.translate(camera.x, camera.y);
     ctx.scale(camera.zoom, camera.zoom);
 
-    // Selection set: prefer the multi-select set, fall back to the single
-    // id for callers that haven't been migrated. drawElement only knows
-    // about isSelected (boolean), so we compute it per-element.
     const selSet = selectedIds && selectedIds.size > 0
         ? selectedIds
         : (selectedId ? new Set([selectedId]) : new Set());
@@ -39,7 +37,7 @@ export function renderCanvas(ctx, state) {
         isHovered: el.id === hoverEdgeNodeId,
     }, elements));
 
-    // Remote selection rings — drawn from peers' interpolated bounds.
+    // remote selection rings
     if (peers) {
         const ringsByTarget = new Map();
         for (const peerState of Object.values(peers)) {
@@ -87,9 +85,7 @@ export function renderCanvas(ctx, state) {
         if (node && isNodeType(node.type)) drawAnchorDots(ctx, node);
     }
 
-    // Resize handles only when exactly one node-type shape is selected.
-    // Multi-selection or arrow-only selection: no handles. Matches the
-    // resize action's gating in GraphActions.js.
+    // resize handles
     if (activeTool === 'select' && selSet.size === 1) {
         const onlyId = selSet.values().next().value;
         const sel = elements.find(e => e.id === onlyId);
@@ -118,9 +114,7 @@ export function renderCanvas(ctx, state) {
         }
     }
 
-    // Marquee selection box. Drawn in world space so it pans/zooms with
-    // the canvas. Translucent blue fill + dashed outline — matches Figma /
-    // Photoshop visual language.
+    // marquee selection box
     if (pendingMarquee) {
         const m = pendingMarquee;
         const w = m.maxX - m.minX;
@@ -146,6 +140,7 @@ export function renderCanvas(ctx, state) {
     ctx.restore();
 }
 
+// remote cursor rendering
 function drawRemoteCursor(ctx, x, y, user, zoom) {
     const s = 1 / zoom;
     ctx.save();

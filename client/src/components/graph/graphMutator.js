@@ -1,14 +1,16 @@
-// Mutation adapter for graph elements. See useElementsView.js for the read
-// side and useLocalOverrides.js for the local-only drag overlay.
-
+// imports
 import * as Y from 'yjs';
 
+// timing and layout constants
 const DRAG_THROTTLE_MS = 1000 / 30;
 const Z_STEP = 1;
 
+// factory function initialization
 export function makeGraphMutator(doc, yElements, localState) {
+    // internal cache instances
     const throttles = new Map();
 
+    // throttle queue utilities
     function getThrottle(id) {
         let t = throttles.get(id);
         if (!t) {
@@ -28,6 +30,7 @@ export function makeGraphMutator(doc, yElements, localState) {
         writeUpdate(id, patch);
     }
 
+    // shared doc transaction writer
     function writeUpdate(id, patch) {
         if (!yElements.has(id)) return;
         const ymap = yElements.get(id);
@@ -38,6 +41,7 @@ export function makeGraphMutator(doc, yElements, localState) {
         });
     }
 
+    // z-index evaluation queries
     function getZ(ymap) {
         const z = ymap.get('z');
         return typeof z === 'number' ? z : 0;
@@ -75,7 +79,9 @@ export function makeGraphMutator(doc, yElements, localState) {
         return best;
     }
 
+    // interface actions map
     return {
+        // entity setup actions
         create(element) {
             const withZ = element.z == null
                 ? { ...element, z: nextTopZ() }
@@ -89,6 +95,7 @@ export function makeGraphMutator(doc, yElements, localState) {
             });
         },
 
+        // basic update committers
         update(id, patch) {
             flushThrottle(id);
             writeUpdate(id, patch);
@@ -136,6 +143,7 @@ export function makeGraphMutator(doc, yElements, localState) {
             });
         },
 
+        // entity destructors
         remove(id) {
             const t = throttles.get(id);
             if (t?.timer) clearTimeout(t.timer);
@@ -156,6 +164,7 @@ export function makeGraphMutator(doc, yElements, localState) {
             });
         },
 
+        // spatial depth sorting
         bringToFront(id) {
             if (!yElements.has(id)) return;
             const newZ = nextTopZ();
@@ -190,6 +199,7 @@ export function makeGraphMutator(doc, yElements, localState) {
             });
         },
 
+        // duplication utility
         duplicate(id, offset = 20) {
             if (!yElements.has(id)) return null;
             const source = yElements.get(id).toJSON();
@@ -204,11 +214,7 @@ export function makeGraphMutator(doc, yElements, localState) {
             return copy.id;
         },
 
-        // ─── Color ───────────────────────────────────────────────────
-        // Two separate fields so users can mix any stroke with any fill.
-        // Both accept the NO_STROKE / NO_FILL sentinels from graphColors —
-        // we don't validate here; the renderer/picker handle them.
-
+        // visual styling updates
         setStroke(id, hex) {
             this.update(id, { stroke: hex });
         },
@@ -217,8 +223,6 @@ export function makeGraphMutator(doc, yElements, localState) {
             this.update(id, { fill: hex });
         },
 
-        // Set both at once. Useful for matched-pair color picks. Pass null
-        // for either to leave that field unchanged.
         setColors(id, { stroke, fill }) {
             const patch = {};
             if (stroke !== undefined && stroke !== null) patch.stroke = stroke;
@@ -226,13 +230,11 @@ export function makeGraphMutator(doc, yElements, localState) {
             if (Object.keys(patch).length > 0) this.update(id, patch);
         },
 
-        // Deprecated alias kept for back-compat with the early menu wiring.
-        // Maps to setStroke (the old "change color" really meant outline).
-        // Remove once no callers reference it.
         changeColor(id, hex) {
             this.setStroke(id, hex);
         },
 
+        // class state updates
         changeType(id, type) {
             this.update(id, { type });
         },

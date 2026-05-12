@@ -1,6 +1,7 @@
 // user functions
 import { resolveColors, HOVER_STROKE } from './graphColors';
 
+// distance helpers
 export function getDistanceToLine(px, py, x1, y1, x2, y2) {
     const A = px - x1;
     const B = py - y1;
@@ -29,6 +30,7 @@ export function getDistanceToLine(px, py, x1, y1, x2, y2) {
     return Math.sqrt(dx * dx + dy * dy);
 }
 
+// bounds helpers
 export function getNodeBounds(el) {
     const minX = Math.min(el.x, el.x + (el.width || 0));
     const maxX = Math.max(el.x, el.x + (el.width || 0));
@@ -37,6 +39,7 @@ export function getNodeBounds(el) {
     return { minX, maxX, minY, maxY, w: maxX - minX, h: maxY - minY };
 }
 
+// anchor management
 export function getAnchorDots(el) {
     const b = getNodeBounds(el);
     return [
@@ -113,10 +116,12 @@ export function getAnchorFromPoint(el, px, py, tol = 12) {
     return { side: best.side, t: Math.max(0, Math.min(1, best.t)) };
 }
 
+// element type checking
 export function isNodeType(type) {
     return type === 'rectangle' || type === 'circle' || type === 'text';
 }
 
+// hit testing
 export function isHittingLabel(px, py, el) {
     const tol = 10;
     if (el.type === 'text') {
@@ -176,6 +181,7 @@ export function isHittingEdge(px, py, el, allElements) {
     return false;
 }
 
+// connection endpoints
 export function getArrowEndpoints(arrow, allElements) {
     let from, to;
 
@@ -202,10 +208,7 @@ export function getArrowEndpoints(arrow, allElements) {
     return { from, to };
 }
 
-// Replaces the inline color/state if-else that used to live in drawElement.
-// The colors come from graphColors.resolveColors — drawing primitives no
-// longer hardcode hex values. Hover overlay logic is left here since it's
-// strictly a renderer effect, not part of the element's persistent state.
+// drawing rendering helpers
 const CORNER_RADIUS = 8;
 
 function effectiveRadius(w, h) {
@@ -230,9 +233,6 @@ function roundedRectPath(ctx, x, y, w, h, r) {
     ctx.closePath();
 }
 
-// Paint a filled-and-stroked shape. Path must already be built in ctx.
-// Reads skipFill/skipStroke from the resolved color set so transparent fills
-// and stroke-less shapes work without extra branching at every call site.
 function paintShape(ctx, colors, hoverStroke) {
     if (hoverStroke) {
         ctx.save();
@@ -291,6 +291,7 @@ function drawLabel(ctx, element, color) {
     ctx.restore();
 }
 
+// element drawing routines
 export function drawElement(ctx, element, opts = {}, allElements = []) {
     const { isSelected = false, isHighlighted = false, isStarter = false, isHovered = false } = opts;
     const colors = resolveColors(element, { isSelected, isHighlighted, isStarter });
@@ -316,7 +317,7 @@ export function drawElement(ctx, element, opts = {}, allElements = []) {
     } else if (element.type === 'arrow') {
         const ends = getArrowEndpoints(element, allElements);
         if (!ends) return;
-        if (colors.skipStroke) return; // arrow with no stroke is invisible
+        if (colors.skipStroke) return;
 
         if (hoverStroke) {
             ctx.save();
@@ -350,14 +351,13 @@ export function drawElement(ctx, element, opts = {}, allElements = []) {
             ctx.fillRect(b.minX - 6, b.minY - 6, b.w + 12, b.h + 12);
         }
         ctx.font = '16px Arial, sans-serif';
-        // Text uses the stroke color as its ink color — pastels would be
-        // illegible on a typical canvas background.
         ctx.fillStyle = colors.stroke;
         ctx.textBaseline = 'top';
         ctx.fillText(element.text, element.x, element.y);
     }
 }
 
+// resize handles management
 export function getResizeHandles(el) {
     const b = getNodeBounds(el);
     const SIZE = 8;
@@ -413,6 +413,7 @@ export function applyResize(start, side, worldX, worldY) {
     return { x, y, width, height };
 }
 
+// shape normalization
 export function normalizeBounds(el) {
     let { x, y, width, height } = el;
     if (width < 0)  { x += width;  width  = -width;  }
@@ -420,6 +421,7 @@ export function normalizeBounds(el) {
     return { ...el, x, y, width, height };
 }
 
+// geometry rendering primitives
 export function drawArrowLine(ctx, x1, y1, x2, y2) {
     ctx.beginPath();
     ctx.moveTo(x1, y1);
@@ -454,6 +456,7 @@ export function drawAnchorDots(ctx, el) {
     });
 }
 
+// graph logic analysis
 export function buildExecutionOrder(starterId, elements) {
     if (!starterId) return [];
     const nodeById = new Map();
@@ -491,6 +494,7 @@ export function buildExecutionOrder(starterId, elements) {
     return steps;
 }
 
+// utility parsing
 export function getElementLabel(el) {
     if (!el) return '(missing)';
     if (el.type === 'text') return el.text || '(text)';

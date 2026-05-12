@@ -1,18 +1,22 @@
 // Right-click context menu for the graph canvas.
 
+// imports
 import { useEffect, useRef, useState, useLayoutEffect } from 'react';
 import { isNodeType } from './GraphHelper';
 import { STROKES, FILLS, NO_STROKE, NO_FILL } from './graphColors';
 
+// layout constants
 const MENU_WIDTH = 200;
 const COLOR_SUBMENU_WIDTH = 220;
 const TYPE_SUBMENU_WIDTH = 160;
 
+// data configs
 const SHAPE_TYPES_FOR_TYPE_CHANGE = [
     { type: 'rectangle', label: 'Rectangle' },
     { type: 'circle',    label: 'Circle' },
 ];
 
+// main context menu component
 export default function GraphContextMenu({
     variant,
     screenPos,
@@ -22,10 +26,12 @@ export default function GraphContextMenu({
     actions,
     onClose,
 }) {
+    // state and refs
     const rootRef = useRef(null);
     const [adjustedPos, setAdjustedPos] = useState(screenPos);
     const [openSubmenu, setOpenSubmenu] = useState(null);
 
+    // layout adjustments
     useLayoutEffect(() => {
         const el = rootRef.current;
         if (!el) return;
@@ -39,6 +45,7 @@ export default function GraphContextMenu({
         setAdjustedPos({ x, y });
     }, [screenPos.x, screenPos.y]);
 
+    // cleanup and external click handlers
     useEffect(() => {
         function handleMouseDown(e) {
             if (rootRef.current && !rootRef.current.contains(e.target)) onClose();
@@ -61,19 +68,18 @@ export default function GraphContextMenu({
         };
     }, [onClose]);
 
-    // Wrap an action so the menu closes after it runs. Color picks use this
-    // (one click → applied + closed). Hover-to-open submenus don't.
+    // action wrapper
     const run = (fn) => (...args) => {
         try { fn?.(...args); } finally { onClose(); }
     };
 
+    // computed target states
     const isShape = variant === 'shape';
     const targetIsNode = isShape && target && isNodeType(target.type);
     const canChangeType = isShape && target && (target.type === 'rectangle' || target.type === 'circle');
-    // Lines and arrows have a stroke but no meaningful fill, so the color
-    // submenu hides the Background section for them.
     const targetHasFill = isShape && target && isNodeType(target.type);
 
+    // render
     return (
         <div
             ref={rootRef}
@@ -167,6 +173,7 @@ export default function GraphContextMenu({
     );
 }
 
+// menu item layout
 function MenuItem({
     label, shortcut, onClick, disabled, hasSubmenu, isSubmenuOpen,
     onMouseEnter, onMouseLeave, children,
@@ -199,19 +206,12 @@ function MenuItem({
     );
 }
 
+// divider layout
 function Divider() {
     return <div style={{ height: 1, background: '#e5e7eb', margin: '4px 0' }} />;
 }
 
-// Two-section color panel. Top row is "Line" (bright strokes), bottom row
-// is "Background" (pastels). Both sections include a "none" tile that maps
-// to the sentinel. The currently-selected value (matching element.stroke /
-// element.fill) gets a highlighted border.
-//
-// The panel is wider than a typical submenu, which is why COLOR_SUBMENU_WIDTH
-// is its own constant. If the element doesn't support fills (lines, arrows),
-// the Background section is hidden entirely instead of disabled — saves
-// visual noise.
+// color picking panel view
 function ColorPanel({ currentStroke, currentFill, showFill, onPickStroke, onPickFill }) {
     return (
         <div
@@ -247,6 +247,7 @@ function ColorPanel({ currentStroke, currentFill, showFill, onPickStroke, onPick
     );
 }
 
+// swatch row structure
 function ColorSection({ label, swatches, current, noneValue, noneLabel, onPick }) {
     return (
         <div>
@@ -275,6 +276,7 @@ function ColorSection({ label, swatches, current, noneValue, noneLabel, onPick }
     );
 }
 
+// individual color button
 function Swatch({ hex, isSelected, isNone, onClick, ariaLabel }) {
     return (
         <button
@@ -285,9 +287,6 @@ function Swatch({ hex, isSelected, isNone, onClick, ariaLabel }) {
                 width: 28,
                 height: 28,
                 background: isNone ? '#ffffff' : hex,
-                // Selection ring: a 2px outline in accent blue. We use
-                // outline rather than border so the swatch size doesn't
-                // shift when (de)selected.
                 border: '1px solid #e5e7eb',
                 outline: isSelected ? '2px solid #3b82f6' : 'none',
                 outlineOffset: '1px',
@@ -299,8 +298,6 @@ function Swatch({ hex, isSelected, isNone, onClick, ariaLabel }) {
             }}
         >
             {isNone && (
-                // Diagonal red slash to indicate "none". Drawn as a rotated
-                // span so it scales cleanly without needing an SVG asset.
                 <span style={{
                     position: 'absolute',
                     top: '50%',
@@ -316,6 +313,7 @@ function Swatch({ hex, isSelected, isNone, onClick, ariaLabel }) {
     );
 }
 
+// shape type switcher menu
 function TypeSubmenu({ currentType, onPick }) {
     return (
         <div style={{ ...submenuStyle(), width: TYPE_SUBMENU_WIDTH }}>
@@ -343,6 +341,7 @@ function TypeSubmenu({ currentType, onPick }) {
     );
 }
 
+// layout styling helpers
 function submenuStyle() {
     return {
         position: 'absolute',

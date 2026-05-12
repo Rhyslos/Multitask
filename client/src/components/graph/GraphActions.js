@@ -1,3 +1,4 @@
+// imports
 import {
     isHittingEdge,
     getHandleAtPoint,
@@ -11,10 +12,7 @@ import {
     getNodeBounds,
 } from './GraphHelper';
 
-// ───────────────────────────────────────────────────────────────
-// Helpers shared across actions
-// ───────────────────────────────────────────────────────────────
-
+// helper functions
 function findNodeAtEdge(elements, px, py) {
     for (let i = elements.length - 1; i >= 0; i--) {
         const el = elements[i];
@@ -127,12 +125,8 @@ function constrainResizeToAspect(proposed, original, side) {
     return { x, y, width: w, height: h };
 }
 
-// Returns true if an element's bounds intersect a marquee rectangle. For
-// nodes (rect/circle/text), it's an AABB overlap. For arrows/lines, it's
-// "is any part of the segment inside the rect" — which is true if either
-// endpoint is inside OR the segment crosses any of the rect's four edges.
+// intersection functions
 function elementIntersectsRect(el, allElements, rect) {
-    // rect = { minX, minY, maxX, maxY } — normalized.
     if (isNodeType(el.type)) {
         const b = getNodeBounds(el);
         return !(
@@ -151,13 +145,9 @@ function elementIntersectsRect(el, allElements, rect) {
     return false;
 }
 
-// Cohen-style cheap path: endpoint-in-rect OR Liang-Barsky line clip. We
-// only need a boolean, so the parametric clip is overkill — checking
-// endpoints first short-circuits most cases.
 function segmentIntersectsRect(x1, y1, x2, y2, minX, minY, maxX, maxY) {
     const inside = (x, y) => x >= minX && x <= maxX && y >= minY && y <= maxY;
     if (inside(x1, y1) || inside(x2, y2)) return true;
-    // Segment vs each of the four rect edges.
     return segIntersect(x1, y1, x2, y2, minX, minY, maxX, minY) ||
            segIntersect(x1, y1, x2, y2, maxX, minY, maxX, maxY) ||
            segIntersect(x1, y1, x2, y2, maxX, maxY, minX, maxY) ||
@@ -173,10 +163,7 @@ function segIntersect(ax, ay, bx, by, cx, cy, dx, dy) {
            ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
 }
 
-// ───────────────────────────────────────────────────────────────
-// Actions
-// ───────────────────────────────────────────────────────────────
-
+// action definitions
 export const middleMousePanAction = {
     name: 'middleMousePan',
     priority: 100,
@@ -242,9 +229,6 @@ export const resizeAction = {
     name: 'resize',
     priority: 60,
     tryStart(ctx, evt) {
-        // Resize handles only render for a single selection — multi-select
-        // doesn't show them, so this action only fires when exactly one
-        // node is selected. Matches the renderer's behavior.
         if (ctx.activeTool !== 'select' || evt.button !== 0) return null;
         if (!ctx.selectedIds || ctx.selectedIds.size !== 1) return null;
         const onlyId = ctx.selectedIds.values().next().value;
@@ -287,9 +271,6 @@ export const resizeAction = {
     getCursor: (ctx, ds) => ds.cursor,
 };
 
-// Select + move. With multi-selection: if the clicked shape is already part
-// of the selection, the whole group moves together. If it isn't, behavior
-// depends on the shift key — shift adds to selection, otherwise replaces.
 export const selectMoveAction = {
     name: 'selectMove',
     priority: 50,
@@ -297,8 +278,6 @@ export const selectMoveAction = {
         if (ctx.activeTool !== 'select' || evt.button !== 0) return null;
         const hit = [...ctx.elements].reverse().find(el => isHittingEdge(evt.worldX, evt.worldY, el, ctx.elements));
         if (!hit) {
-            // No hit and no shift = clear selection. With shift, leave it
-            // alone — marquee action will pick this up next.
             if (!evt.shiftKey) ctx.setSelectedId(null);
             return null;
         }
@@ -306,46 +285,31 @@ export const selectMoveAction = {
         const sel = ctx.selectedIds || new Set();
         const alreadySelected = sel.has(hit.id);
 
-        // Update selection BEFORE deciding what to drag, so the drag group
-        // matches the new selection.
         let groupIds;
         if (evt.shiftKey) {
             if (alreadySelected) {
-                // Shift-click on selected member: remove it. No drag.
                 const next = new Set(sel);
                 next.delete(hit.id);
                 ctx.setSelectedId(next);
                 return null;
             }
-            // Shift-click adds to selection. The newly-added shape becomes
-            // part of the drag group along with everything already selected.
             const next = new Set(sel);
             next.add(hit.id);
             ctx.setSelectedId(next);
             groupIds = [...next];
         } else if (alreadySelected && sel.size > 1) {
-            // Click on a member of an existing multi-selection: drag the
-            // whole group. Don't change the selection.
             groupIds = [...sel];
         } else {
-            // Click on a shape (selected or not), no shift: replace selection.
             ctx.setSelectedId(hit.id);
             groupIds = [hit.id];
         }
 
-        // Arrows/lines aren't draggable directly — their endpoints move
-        // when their endpoint nodes move. Filter them out of the drag
-        // group; if that leaves nothing, no drag.
         const draggable = groupIds.filter(id => {
             const el = ctx.elements.find(e => e.id === id);
             return el && isNodeType(el.type);
         });
         if (draggable.length === 0) return null;
 
-        // Snapshot starting positions for every draggable shape, so onMove
-        // can compute final positions from a single delta against origin.
-        // Computing relative-to-anchor every frame would be cheaper but
-        // floating-point drift would creep in across many move events.
         const starts = new Map();
         for (const id of draggable) {
             const el = ctx.elements.find(e => e.id === id);
@@ -363,8 +327,6 @@ export const selectMoveAction = {
     onMove(ctx, ds, evt) {
         const dx = evt.worldX - ds.startWorldX;
         const dy = evt.worldY - ds.startWorldY;
-        // Apply the same delta to each shape in the group. Per-id throttling
-        // means every shape gets its own 30Hz cadence — no shared bottleneck.
         for (const [id, start] of ds.starts) {
             ctx.mutator.throttledUpdate(id, {
                 x: start.x + dx,
@@ -504,20 +466,11 @@ export const drawAction = {
     getCursor: () => 'crosshair',
 };
 
-// Marquee select. Lowest priority — runs only when select tool is active
-// AND no shape was hit (selectMove returned null without consuming the
-// event). Renders a translucent rect during the drag. On release, every
-// element intersecting the rect joins the selection.
-//
-// Shift held at start: ADD to existing selection rather than replacing.
-// Held mid-drag doesn't matter — only the modifier at tryStart fixes the mode.
 export const marqueeSelectAction = {
     name: 'marqueeSelect',
     priority: 30,
     tryStart(ctx, evt) {
         if (ctx.activeTool !== 'select' || evt.button !== 0) return null;
-        // Don't start a marquee if there's a shape under the pointer —
-        // selectMove (priority 50) handles that path. We're the fallback.
         const hit = ctx.elements.find(el => isHittingEdge(evt.worldX, evt.worldY, el, ctx.elements));
         if (hit) return null;
 
@@ -525,14 +478,10 @@ export const marqueeSelectAction = {
             startX: evt.worldX,
             startY: evt.worldY,
             additive: !!evt.shiftKey,
-            // Snapshot selection at drag start so additive mode can compute
-            // (initial ∪ hits) regardless of intermediate state.
             initial: new Set(ctx.selectedIds || []),
         };
     },
     onMove(ctx, ds, evt) {
-        // The marquee rect is driven via setPendingMarquee — same pattern as
-        // pendingConnection. Renderer reads it and paints the translucent box.
         ctx.setPendingMarquee?.({
             minX: Math.min(ds.startX, evt.worldX),
             minY: Math.min(ds.startY, evt.worldY),
@@ -550,8 +499,6 @@ export const marqueeSelectAction = {
             maxX: Math.max(ds.startX, evt.worldX),
             maxY: Math.max(ds.startY, evt.worldY),
         };
-        // Tiny rect = treat as a click on empty space, not a marquee.
-        // (Threshold mirrors the connect-action's no-commit click guard.)
         if (rect.maxX - rect.minX < 3 && rect.maxY - rect.minY < 3) {
             if (!ds.additive) ctx.setSelectedId(null);
             return;
@@ -571,6 +518,7 @@ export const marqueeSelectAction = {
     getCursor: () => 'default',
 };
 
+// exported action list
 export const ALL_ACTIONS = [
     middleMousePanAction,
     resizeAction,

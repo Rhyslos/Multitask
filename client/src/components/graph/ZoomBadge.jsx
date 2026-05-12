@@ -1,4 +1,4 @@
-// Bottom-right overlay: live zoom percentage + reset-view button.
+// main component
 export default function ZoomBadge({ zoom, onReset }) {
     const baseBtn = {
         background: 'rgba(255,255,255,0.92)',

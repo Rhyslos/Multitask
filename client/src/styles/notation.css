@@ -744,3 +744,41 @@
 .collab-cursor:hover .collab-cursor__label {
     opacity: 1;
 }
+
+.notation-sidebar-page[draggable="true"] {
+    cursor: grab;
+}
+.notation-sidebar-page[draggable="true"]:active {
+    cursor: grabbing;
+}
+
+/* drag preview rendering */
+.notation-sidebar-page-wrapper {
+    position: relative;
+    width: 100%;
+}
+
+.notation-drop-indicator {
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    height: 2px;
+    background-color: var(--accent, #007bff);
+    z-index: 10;
+    pointer-events: none;
+    border-radius: 1px;
+}
+
+/* Position indicator perfectly between list items */
+.notation-sidebar-page-wrapper .notation-drop-indicator:first-child {
+    top: -1px;
+}
+
+.notation-sidebar-page-wrapper .notation-drop-indicator:last-child {
+    bottom: -1px;
+}
+
+/* Optional: Dim the original item being dragged */
+.notation-sidebar-page.dragging {
+    opacity: 0.4;
+}

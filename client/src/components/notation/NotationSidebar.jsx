@@ -5,7 +5,18 @@ import { createPortal } from 'react-dom';
 export default function NotationSidebar({ workspaceID, activePageID, onPageSelect }) {
     
     // state hooks
-    const { groups, pages, loading, createGroup, createPage, renameGroup, renamePage, colorGroup } = useNotationSidebar(workspaceID);
+    const { 
+        groups, 
+        pages, 
+        loading, 
+        createGroup, 
+        createPage, 
+        renameGroup, 
+        renamePage, 
+        colorGroup, 
+        reorderPages 
+    } = useNotationSidebar(workspaceID);
+    
     const [collapsedGroups, setCollapsedGroups] = useState(new Set());
     const [showModal, setShowModal] = useState(false);
     const [modalPos, setModalPos] = useState({ top: 0, left: 0 });
@@ -15,6 +26,10 @@ export default function NotationSidebar({ workspaceID, activePageID, onPageSelec
     const [editingColorID, setEditingColorID] = useState(null);
     const [pickerPos, setPickerPos] = useState({ top: 0, left: 0 });
     const [editingPageID, setEditingPageID] = useState(null);
+    
+    const [draggedPageID, setDraggedPageID] = useState(null);
+    const [dropTargetID, setDropTargetID] = useState(null);
+    const [dropPosition, setDropPosition] = useState(null); 
 
     // reference hooks
     const nameRefs = useRef({});
@@ -124,6 +139,84 @@ export default function NotationSidebar({ workspaceID, activePageID, onPageSelec
         }
     }
 
+    // drag handlers
+    function handleDragStart(e, pageID) {
+        setDraggedPageID(pageID);
+        e.dataTransfer.effectAllowed = 'move';
+    }
+
+    function handleDragOverGroup(e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+    }
+
+    function handleDragOverPage(e, targetPageID) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.dataTransfer.dropEffect = 'move';
+
+        if (draggedPageID === targetPageID) {
+            setDropTargetID(null);
+            setDropPosition(null);
+            return;
+        }
+
+        const rect = e.currentTarget.getBoundingClientRect();
+        const midPoint = rect.top + rect.height / 2;
+        const position = e.clientY < midPoint ? 'before' : 'after';
+
+        setDropTargetID(targetPageID);
+        setDropPosition(position);
+    }
+
+    function handleDragLeavePage(e) {
+        const related = e.relatedTarget;
+        if (!e.currentTarget.contains(related)) {
+            setDropTargetID(null);
+            setDropPosition(null);
+        }
+    }
+
+    function handleDropOnPage(e, targetPage, targetGroupList) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const currentDraggedID = draggedPageID;
+        const currentPosition = dropPosition;
+        
+        setDraggedPageID(null);
+        setDropTargetID(null);
+        setDropPosition(null);
+
+        if (!currentDraggedID || currentDraggedID === targetPage.id) return;
+
+        let targetIndex = targetGroupList.findIndex(p => p.id === targetPage.id);
+        if (currentPosition === 'after') {
+            targetIndex += 1;
+        }
+
+        const draggedOldIndex = targetGroupList.findIndex(p => p.id === currentDraggedID);
+        if (draggedOldIndex !== -1 && draggedOldIndex < targetIndex && targetPage.groupID === targetGroupList[draggedOldIndex]?.groupID) {
+            targetIndex -= 1;
+        }
+
+        reorderPages(currentDraggedID, targetPage.groupID, targetIndex);
+    }
+
+    function handleDropOnGroup(e, groupID, groupPages) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const currentDraggedID = draggedPageID;
+        setDraggedPageID(null);
+        setDropTargetID(null);
+        setDropPosition(null);
+
+        if (!currentDraggedID) return;
+
+        reorderPages(currentDraggedID, groupID, groupPages.length);
+    }
+
     // modal handlers
     function handleModalClose() {
         setShowModal(false);
@@ -143,6 +236,12 @@ export default function NotationSidebar({ workspaceID, activePageID, onPageSelec
     }
 
     // side effects
+    useEffect(() => {
+        if (!loading && pages.length > 0 && !activePageID) {
+            onPageSelect(pages[0].id);
+        }
+    }, [loading, pages, activePageID, onPageSelect]);
+
     useEffect(() => {
         if (!editingColorID) return;
         function handleClose() { setEditingColorID(null); }
@@ -178,28 +277,46 @@ export default function NotationSidebar({ workspaceID, activePageID, onPageSelec
     // render component
     return (
         <>
-            <div className="notation-sidebar">
+            <div 
+                className="notation-sidebar"
+                onDragOver={handleDragOverGroup}
+                onDrop={e => handleDropOnGroup(e, null, uncategorized)}
+            >
 
                 {/* page list rendering */}
                 {uncategorized.map(page => (
-                    <div
-                        key={page.id}
-                        className={`notation-sidebar-page ${page.id === activePageID ? 'active' : ''}`}
-                        onClick={() => { if (editingPageID !== page.id) onPageSelect(page.id); }}
-                        onDoubleClick={() => startEditingPage(page)}
-                    >
-                        <span className="notation-sidebar-dot" />
-                        <span
-                            ref={el => pageTitleRefs.current[page.id] = el}
-                            className="notation-sidebar-page-title"
-                            contentEditable={editingPageID === page.id}
-                            suppressContentEditableWarning
-                            onBlur={() => handlePageTitleBlur(page)}
-                            onKeyDown={e => handlePageTitleKeyDown(e, page)}
-                            onClick={e => { if (editingPageID === page.id) e.stopPropagation(); }}
+                    <div key={page.id} className="notation-sidebar-page-wrapper">
+                        {dropTargetID === page.id && dropPosition === 'before' && (
+                            <div className="notation-drop-indicator" />
+                        )}
+                        
+                        <div
+                            className={`notation-sidebar-page ${page.id === activePageID ? 'active' : ''} ${draggedPageID === page.id ? 'dragging' : ''}`}
+                            draggable={editingPageID !== page.id}
+                            onDragStart={e => handleDragStart(e, page.id)}
+                            onDragOver={e => handleDragOverPage(e, page.id)}
+                            onDragLeave={handleDragLeavePage}
+                            onDrop={e => handleDropOnPage(e, page, uncategorized)}
+                            onClick={() => { if (editingPageID !== page.id) onPageSelect(page.id); }}
+                            onDoubleClick={() => startEditingPage(page)}
                         >
-                            {page.title}
-                        </span>
+                            <span className="notation-sidebar-dot" />
+                            <span
+                                ref={el => pageTitleRefs.current[page.id] = el}
+                                className="notation-sidebar-page-title"
+                                contentEditable={editingPageID === page.id}
+                                suppressContentEditableWarning
+                                onBlur={() => handlePageTitleBlur(page)}
+                                onKeyDown={e => handlePageTitleKeyDown(e, page)}
+                                onClick={e => { if (editingPageID === page.id) e.stopPropagation(); }}
+                            >
+                                {page.title}
+                            </span>
+                        </div>
+
+                        {dropTargetID === page.id && dropPosition === 'after' && (
+                            <div className="notation-drop-indicator" />
+                        )}
                     </div>
                 ))}
 
@@ -209,7 +326,12 @@ export default function NotationSidebar({ workspaceID, activePageID, onPageSelec
                     const isCollapsed = collapsedGroups.has(group.id);
 
                     return (
-                        <div key={group.id} className="notation-sidebar-group">
+                        <div 
+                            key={group.id} 
+                            className="notation-sidebar-group"
+                            onDragOver={handleDragOverGroup}
+                            onDrop={e => handleDropOnGroup(e, group.id, groupPages)}
+                        >
                             <div
                                 className="notation-sidebar-group-header"
                                 onClick={() => { if (editingGroupID !== group.id) toggleGroup(group.id); }}
@@ -259,24 +381,38 @@ export default function NotationSidebar({ workspaceID, activePageID, onPageSelec
                             {!isCollapsed && (
                                 <div className="notation-sidebar-group-pages">
                                     {groupPages.map(page => (
-                                        <div
-                                            key={page.id}
-                                            className={`notation-sidebar-page ${page.id === activePageID ? 'active' : ''}`}
-                                            onClick={() => { if (editingPageID !== page.id) onPageSelect(page.id); }}
-                                            onDoubleClick={() => startEditingPage(page)}
-                                        >
-                                            <span className="notation-sidebar-dot" />
-                                            <span
-                                                ref={el => pageTitleRefs.current[page.id] = el}
-                                                className="notation-sidebar-page-title"
-                                                contentEditable={editingPageID === page.id}
-                                                suppressContentEditableWarning
-                                                onBlur={() => handlePageTitleBlur(page)}
-                                                onKeyDown={e => handlePageTitleKeyDown(e, page)}
-                                                onClick={e => { if (editingPageID === page.id) e.stopPropagation(); }}
+                                        <div key={page.id} className="notation-sidebar-page-wrapper">
+                                            {dropTargetID === page.id && dropPosition === 'before' && (
+                                                <div className="notation-drop-indicator" />
+                                            )}
+                                            
+                                            <div
+                                                className={`notation-sidebar-page ${page.id === activePageID ? 'active' : ''} ${draggedPageID === page.id ? 'dragging' : ''}`}
+                                                draggable={editingPageID !== page.id}
+                                                onDragStart={e => handleDragStart(e, page.id)}
+                                                onDragOver={e => handleDragOverPage(e, page.id)}
+                                                onDragLeave={handleDragLeavePage}
+                                                onDrop={e => handleDropOnPage(e, page, groupPages)}
+                                                onClick={() => { if (editingPageID !== page.id) onPageSelect(page.id); }}
+                                                onDoubleClick={() => startEditingPage(page)}
                                             >
-                                                {page.title}
-                                            </span>
+                                                <span className="notation-sidebar-dot" />
+                                                <span
+                                                    ref={el => pageTitleRefs.current[page.id] = el}
+                                                    className="notation-sidebar-page-title"
+                                                    contentEditable={editingPageID === page.id}
+                                                    suppressContentEditableWarning
+                                                    onBlur={() => handlePageTitleBlur(page)}
+                                                    onKeyDown={e => handlePageTitleKeyDown(e, page)}
+                                                    onClick={e => { if (editingPageID === page.id) e.stopPropagation(); }}
+                                                >
+                                                    {page.title}
+                                                </span>
+                                            </div>
+
+                                            {dropTargetID === page.id && dropPosition === 'after' && (
+                                                <div className="notation-drop-indicator" />
+                                            )}
                                         </div>
                                     ))}
                                 </div>

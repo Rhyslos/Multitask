@@ -1,6 +1,8 @@
+// initialization functions
 import { useEffect, useRef } from 'react';
 import KanbanTask from './KanbanTask';
 
+// class functions
 export default function KanbanList({
     list,
     tasks,
@@ -8,12 +10,14 @@ export default function KanbanList({
     isFocused,
     dragging,
     insertionPoint,
+    isDraggingList, 
     onUpdate,
     onDelete,
     onAddTask,
     onUpdateTask,
     onDeleteTask,
-    onStartDrag,
+    onStartTaskDrag, 
+    onStartListDrag, 
     onOpenTask,
     onFocusClear,
     registerList,
@@ -24,17 +28,18 @@ export default function KanbanList({
     const nameRef = useRef(null);
     const listRef = useRef(null);
 
+    // event functions
     useEffect(() => {
         registerList(list.id, listRef.current);
         return () => registerList(list.id, null);
-    }, [list.id]);
+    }, [list.id, registerList]);
 
     useEffect(() => {
         if (registerListElement) {
             registerListElement(list.id, listRef.current);
             return () => registerListElement(list.id, null);
         }
-    }, [list.id]);
+    }, [list.id, registerListElement]);
 
     useEffect(() => {
         if (isFocused && nameRef.current) {
@@ -59,19 +64,36 @@ export default function KanbanList({
         }
     }
 
+    // data processing functions
     const categoryData = categories.find(c => c.name === list.category);
     const sortedTasks = [...tasks].sort((a, b) => a.taskOrder - b.taskOrder);
-    const insertionIndex = insertionPoint?.listId === list.id ? insertionPoint.insertIndex : null;
+    
+    const taskInsertionIndex = insertionPoint?.type === 'task' && insertionPoint.listId === list.id 
+        ? insertionPoint.insertIndex 
+        : null;
 
     return (
-        <div className="kanban-list" ref={listRef}>
-            <div className="kanban-list-header">
+        <div 
+            className={`kanban-list ${isDraggingList ? 'is-dragging-list' : ''}`} 
+            ref={listRef}
+        >
+            <div className="kanban-list-header" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div 
+                    className="kanban-list-drag-handle"
+                    onMouseDown={e => onStartListDrag(e, list, listRef.current)}
+                    style={{ cursor: 'grab', color: '#aaa', padding: '0 2px', fontSize: '14px', userSelect: 'none' }}
+                    title="Drag to move list"
+                >
+                    ⋮⋮
+                </div>
+
                 {categoryData && (
                     <span
                         className="kanban-list-category-dot"
-                        style={{ background: categoryData.color }}
+                        style={{ background: categoryData.color, flexShrink: 0 }}
                     />
                 )}
+                
                 <span
                     ref={nameRef}
                     className="kanban-list-name"
@@ -79,16 +101,18 @@ export default function KanbanList({
                     suppressContentEditableWarning
                     onBlur={handleNameBlur}
                     onKeyDown={handleNameKeyDown}
+                    style={{ flex: 1, minWidth: 0, outline: 'none' }}
                 >
                     {list.name}
                 </span>
-                <button className="kanban-list-delete" onClick={onDelete}>✕</button>
+
+                <button className="kanban-list-delete" onClick={onDelete} style={{ flexShrink: 0 }}>✕</button>
             </div>
 
             <div className="kanban-task-container">
                 {sortedTasks.map((task, index) => (
                     <div key={task.id}>
-                        {insertionIndex === index && (
+                        {taskInsertionIndex === index && (
                             <div className="kanban-insertion-indicator" />
                         )}
                         <KanbanTask
@@ -97,14 +121,14 @@ export default function KanbanList({
                             isDragging={dragging === task.id}
                             onUpdate={changes => onUpdateTask(task.id, changes)}
                             onDelete={() => onDeleteTask(task.id)}
-                            onStartDrag={onStartDrag}
+                            onStartDrag={onStartTaskDrag}
                             onOpen={() => onOpenTask(task)}
                             registerTask={registerTask}
                             registerElement={registerTaskElement}
                         />
                     </div>
                 ))}
-                {insertionIndex === sortedTasks.length && (
+                {taskInsertionIndex === sortedTasks.length && (
                     <div className="kanban-insertion-indicator" />
                 )}
             </div>

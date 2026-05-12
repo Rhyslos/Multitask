@@ -32,7 +32,7 @@ export default function Kanban() {
         () => columns.map(c => c.id), 
         [columns.map(c => c.id).join(',')]
     );
-    const { lists, addList, updateList, deleteList } = useLists(columnIDs);
+    const { lists, addList, updateList, deleteList, reorderLists } = useLists(columnIDs);
 
     const listIDs = useMemo(
         () => lists.map(l => l.id), 
@@ -56,6 +56,7 @@ export default function Kanban() {
     // --- Drag and drop ---
     const {
         dragging,
+        dragType,
         cloneMeta,
         insertionPoint,
         registerList,
@@ -66,8 +67,12 @@ export default function Kanban() {
         startDrag,
     } = useDragDrop({
         tasks,
-        onReorder: reorderTasks,
-        onGhostDrop: async (key, task) => {
+        lists,
+        onReorderTasks: reorderTasks,
+        onReorderLists: reorderLists,
+        onGhostDrop: async (key, item) => {
+            // If dragging a list container directly onto a ghost column marker, avoid standard task mappings
+            const isListDrop = item?.columnID !== undefined;
             const isNewColumn = key === "new-column";
 
             let columnID;
@@ -76,22 +81,29 @@ export default function Kanban() {
                 columnID = await addColumn(columns.length);
                 if (!columnID) return;
             } else {
-                // "ghost-col-{columnIndex}" → find the existing column
                 const targetIndex = parseInt(key.replace("ghost-col-", ""));
                 const existingColumn = columns.find(c => c.columnIndex === targetIndex);
                 columnID = existingColumn?.id;
                 if (!columnID) return;
             }
 
+            if (isListDrop) {
+                // Route dragged list directly to the generated target column
+                reorderLists([{ id: item.id, columnID, listOrder: 0 }]);
+                return;
+            }
+
+            // Standard fallback logic handles dropped tasks spawning intermediate lists
             const listID = await addList(columnID, workspaceID, activeTabId);
             if (!listID) return;
 
-            reorderTasks([{ id: task.id, listID, taskOrder: 0 }]);
+            reorderTasks([{ id: item.id, listID, taskOrder: 0 }]);
         },
     });
 
     const isDragging = !!dragging;
-    const draggingTask = tasks.find(t => t.id === dragging);
+    const draggingTask = dragType === 'task' ? tasks.find(t => t.id === dragging) : null;
+    const draggingList = dragType === 'list' ? lists.find(l => l.id === dragging) : null;
 
     // --- Layout ---
     const columnCount = columns.length;
@@ -117,7 +129,6 @@ export default function Kanban() {
         if (listID) setFocusedListId(listID);
     }
 
-    // Deletes a list. If it was the last list in its column, also deletes the column.
     async function handleDeleteList(listID) {
         const list = lists.find(l => l.id === listID);
         if (!list) return;
@@ -132,7 +143,6 @@ export default function Kanban() {
         }
     }
 
-    // Groups tasks by listID so each KanbanList receives only its own tasks.
     const tasksByListID = useMemo(() => {
         const map = {};
         for (const task of tasks) {
@@ -142,7 +152,6 @@ export default function Kanban() {
         return map;
     }, [tasks]);
 
-    // Groups lists by columnID so each KanbanColumn receives only its own lists.
     const listsByColumnID = useMemo(() => {
         const map = {};
         for (const list of lists) {
@@ -187,8 +196,9 @@ export default function Kanban() {
                             categories={categories}
                             focusedListId={focusedListId}
                             dragging={dragging}
+                            dragType={dragType}
                             insertionPoint={insertionPoint}
-                            isDragging={isDragging}
+                            isDraggingTaskToEmptyCol={isDragging && dragType === 'task'}
                             onAddTask={(listID) => {
                                 const list = lists.find(l => l.id === listID);
                                 addTask(listID, list?.category, list?.color);
@@ -197,7 +207,12 @@ export default function Kanban() {
                             onDeleteList={handleDeleteList}
                             onUpdateTask={updateTask}
                             onDeleteTask={deleteTask}
-                            onStartDrag={startDrag}
+                            onStartTaskDrag={(e, task, el) => startDrag(e, task, el, 'task')}
+                            onStartListDrag={(e, list, el) => {
+                                // Cache active container boundary refs cleanly into the pointer tracking matrix
+                                registerListElement(list.id, el);
+                                startDrag(e, list, el, 'list');
+                            }}
                             onOpenTask={setActiveTask}
                             onFocusClear={() => setFocusedListId(null)}
                             registerList={registerList}
@@ -224,7 +239,7 @@ export default function Kanban() {
                 </div>
             </div>
 
-            {cloneMeta && draggingTask && (
+            {cloneMeta && (draggingTask || draggingList) && (
                 <div
                     ref={registerCloneOuter}
                     style={{
@@ -238,15 +253,26 @@ export default function Kanban() {
                     }}
                 >
                     <div ref={registerCloneInner} className="kanban-drag-clone">
-                        <KanbanTask
-                            task={draggingTask}
-                            categories={categories}
-                            isClone={true}
-                            onUpdate={() => {}}
-                            onDelete={() => {}}
-                            onStartDrag={() => {}}
-                            onOpen={() => {}}
-                        />
+                        {dragType === 'task' && draggingTask && (
+                            <KanbanTask
+                                task={draggingTask}
+                                categories={categories}
+                                isClone={true}
+                                onUpdate={() => {}}
+                                onDelete={() => {}}
+                                onStartDrag={() => {}}
+                                onOpen={() => {}}
+                            />
+                        )}
+                        {dragType === 'list' && draggingList && (
+                            <div className="kanban-list is-clone" style={{ width: cloneMeta.width }}>
+                                <div className="kanban-list-header">
+                                    <span className="kanban-list-name" style={{ flex: 1 }}>
+                                        {draggingList.name}
+                                    </span>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}

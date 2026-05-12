@@ -16,12 +16,14 @@ export default function useCanvasPointer({
     elements,
     mutator,
     selectedId, setSelectedId,
+    selectedIds,                  // Set<string> — the source of truth for multi-select
     camera, setCamera, screenToWorld,
     activeTool,
     editingText,
     setPendingConnection,
+    setPendingMarquee,            // marquee-rect setter, mirrors setPendingConnection
     broadcastCursor,
-    suppressHover = false,    // pause hover state mutations (e.g. while context menu is open)
+    suppressHover = false,
 }) {
     const [hoverNodeId, setHoverNodeId] = useState(null);
     const [hoverHandle, setHoverHandle] = useState(null);
@@ -35,9 +37,9 @@ export default function useCanvasPointer({
 
     const ctxRef = useRef({});
     ctxRef.current = {
-        elements, selectedId, camera, activeTool,
+        elements, selectedId, selectedIds, camera, activeTool,
         mutator,
-        setSelectedId, setCamera, setPendingConnection,
+        setSelectedId, setCamera, setPendingConnection, setPendingMarquee,
     };
 
     const buildEvt = useCallback((nativeEvent) => {
@@ -69,9 +71,6 @@ export default function useCanvasPointer({
     const handlePointerDown = useCallback((e) => {
         if (editingText) return;
         if (activeRef.current) return;
-        // Right-click is handled by GraphCanvas.onContextMenu; left/middle
-        // proceed through the action priority chain. Buttons other than
-        // 0 / 1 are ignored.
         if (e.nativeEvent.button !== 0 && e.nativeEvent.button !== 1) return;
 
         const evt = buildEvt(e.nativeEvent);
@@ -102,9 +101,6 @@ export default function useCanvasPointer({
             return;
         }
 
-        // While a context menu is open, freeze hover hit-testing. This
-        // prevents hover styles from updating under the menu, which would
-        // cause visible flickering and pointless re-renders.
         if (suppressHover) return;
 
         let labelHitId = null;
@@ -133,7 +129,8 @@ export default function useCanvasPointer({
         }
 
         let newHandle = null;
-        if (activeTool === 'select' && selectedId) {
+        // Handles only render for a single selection — match here.
+        if (activeTool === 'select' && selectedIds?.size === 1) {
             const sel = elements.find(el => el.id === selectedId);
             const h = sel && isNodeType(sel.type) ? getHandleAtPoint(sel, evt.worldX, evt.worldY) : null;
             newHandle = h ? { side: h.side, cursor: h.cursor } : null;
@@ -151,7 +148,7 @@ export default function useCanvasPointer({
         }
         if (edgeHitId !== hoverEdgeNodeId) setHoverEdgeNodeId(edgeHitId);
 
-    }, [buildEvt, broadcastCursor, suppressHover, activeTool, elements, selectedId, hoverNodeId, hoverHandle, hoverLabelNodeId, hoverEdgeNodeId]);
+    }, [buildEvt, broadcastCursor, suppressHover, activeTool, elements, selectedId, selectedIds, hoverNodeId, hoverHandle, hoverLabelNodeId, hoverEdgeNodeId]);
 
     const handlePointerUp = useCallback((e) => {
         if (!activeRef.current) return;
@@ -186,14 +183,18 @@ export default function useCanvasPointer({
                 return;
             }
 
-            if ((e.key === 'Backspace' || e.key === 'Delete') && selectedId) {
-                const idsToRemove = [selectedId];
+            // Delete the whole selection (any size). Cascade arrows/lines
+            // referencing any selected node, exactly like before, just over
+            // a set of starting ids instead of one.
+            if ((e.key === 'Backspace' || e.key === 'Delete') && selectedIds && selectedIds.size > 0) {
+                const idsToRemove = new Set(selectedIds);
                 for (const el of elements) {
-                    if (el.type === 'arrow' && (el.fromId === selectedId || el.toId === selectedId)) {
-                        idsToRemove.push(el.id);
+                    if ((el.type === 'arrow' || el.type === 'line') &&
+                        (idsToRemove.has(el.fromId) || idsToRemove.has(el.toId))) {
+                        idsToRemove.add(el.id);
                     }
                 }
-                mutator.removeMany(idsToRemove);
+                mutator.removeMany([...idsToRemove]);
                 setSelectedId(null);
             }
         };
@@ -210,7 +211,7 @@ export default function useCanvasPointer({
             window.removeEventListener('keydown', handleKeyDown);
             window.removeEventListener('keyup', handleKeyUp);
         };
-    }, [editingText, selectedId, elements, mutator, setSelectedId, cancel]);
+    }, [editingText, selectedIds, elements, mutator, setSelectedId, cancel]);
 
     return {
         handlePointerDown,

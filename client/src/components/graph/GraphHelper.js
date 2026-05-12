@@ -111,6 +111,9 @@ export function getAnchorFromPoint(el, px, py, tol = 12) {
     return { side: best.side, t: Math.max(0, Math.min(1, best.t)) };
 }
 
+// Lines and arrows are connection-type elements; rectangles, circles, and
+// text are node-type. Only node-types support resize handles, anchors, and
+// labels-via-double-click.
 export function isNodeType(type) {
     return type === 'rectangle' || type === 'circle' || type === 'text';
 }
@@ -121,12 +124,12 @@ export function isHittingLabel(px, py, el) {
         const b = getNodeBounds(el);
         return px >= b.minX - tol && px <= b.maxX + tol && py >= b.minY - tol && py <= b.maxY + tol;
     }
-    
+
     const b = getNodeBounds(el);
     const padding = 16;
     const maxWidth = Math.max(10, b.w - padding);
     const labelStr = el.label || '';
-    
+
     const approxLines = labelStr ? Math.max(1, Math.ceil((labelStr.length * 8) / maxWidth)) : 1;
     const labelH = Math.max(20, approxLines * 16);
     const labelW = labelStr ? (approxLines > 1 ? maxWidth : labelStr.length * 8) : 40;
@@ -140,7 +143,10 @@ export function isHittingLabel(px, py, el) {
 export function isHittingEdge(px, py, el, allElements) {
     const tol = 10;
 
-    if (el.type === 'arrow') {
+    // Arrow and line use identical hit-testing: distance from the point to
+    // the segment between the resolved endpoints. The arrowhead is small
+    // enough not to matter; both feel the same to click.
+    if (el.type === 'arrow' || el.type === 'line') {
         const ends = getArrowEndpoints(el, allElements);
         if (!ends) return false;
         return getDistanceToLine(px, py, ends.from.x, ends.from.y, ends.to.x, ends.to.y) <= tol;
@@ -154,26 +160,32 @@ export function isHittingEdge(px, py, el, allElements) {
         const inInner = px >= b.minX + tol && px <= b.maxX - tol && py >= b.minY + tol && py <= b.maxY - tol;
         return el.type === 'text' ? inOuter : (inOuter && (!inInner || inLabel));
     }
-    
+
     if (el.type === 'circle') {
         const rx = b.w / 2;
         const ry = b.h / 2;
         const cx = b.minX + rx;
         const cy = b.minY + ry;
         if (rx === 0 || ry === 0) return false;
-        
+
         const isInsideOuter = ((px - cx) ** 2) / ((rx + tol) ** 2) + ((py - cy) ** 2) / ((ry + tol) ** 2) <= 1;
         const innerRx = Math.max(0, rx - tol);
         const innerRy = Math.max(0, ry - tol);
         const isInsideInner = innerRx > 0 && innerRy > 0
             ? ((px - cx) ** 2) / (innerRx ** 2) + ((py - cy) ** 2) / (innerRy ** 2) <= 1
             : false;
-            
+
         return isInsideOuter && (!isInsideInner || inLabel);
     }
     return false;
 }
 
+// Resolves both endpoints of an arrow or line to world coordinates. Handles
+// all four endpoint forms: anchored ({fromId, fromAnchor}), free
+// ({fromPoint}), and the legacy x/y/width-height encoding used by some
+// existing data. Despite the name, this is used for lines too — keeping the
+// name avoids touching every caller, but the contract is "resolve connection
+// endpoints".
 export function getArrowEndpoints(arrow, allElements) {
     let from, to;
 
@@ -220,38 +232,29 @@ function roundedRectPath(ctx, x, y, w, h, r) {
     const maxX = Math.max(x, x + w);
     const minY = Math.min(y, y + h);
     const maxY = Math.max(y, y + h);
-    const radius = Math.min(r, (maxX - minX) / 2, (maxY - minY) / 2);
     ctx.beginPath();
-    ctx.moveTo(minX + radius, minY);
-    ctx.lineTo(maxX - radius, minY);
-    ctx.quadraticCurveTo(maxX, minY, maxX, minY + radius);
-    ctx.lineTo(maxX, maxY - radius);
-    ctx.quadraticCurveTo(maxX, maxY, maxX - radius, maxY);
-    ctx.lineTo(minX + radius, maxY);
-    ctx.quadraticCurveTo(minX, maxY, minX, maxY - radius);
-    ctx.lineTo(minX, minY + radius);
-    ctx.quadraticCurveTo(minX, minY, minX + radius, minY);
+    ctx.moveTo(minX + r, minY);
+    ctx.lineTo(maxX - r, minY);
+    ctx.quadraticCurveTo(maxX, minY, maxX, minY + r);
+    ctx.lineTo(maxX, maxY - r);
+    ctx.quadraticCurveTo(maxX, maxY, maxX - r, maxY);
+    ctx.lineTo(minX + r, maxY);
+    ctx.quadraticCurveTo(minX, maxY, minX, maxY - r);
+    ctx.lineTo(minX, minY + r);
+    ctx.quadraticCurveTo(minX, minY, minX + r, minY);
     ctx.closePath();
 }
 
 function fillWithShadowThenStroke(ctx, fill, stroke, lineWidth, hoverStroke) {
-    ctx.save();
-    ctx.shadowColor = 'rgba(15, 23, 42, 0.12)';
-    ctx.shadowBlur = 12;
-    ctx.shadowOffsetX = 0;
-    ctx.shadowOffsetY = 3;
-    ctx.fillStyle = fill;
-    ctx.fill();
-    ctx.restore();
-
     if (hoverStroke) {
         ctx.save();
         ctx.strokeStyle = hoverStroke;
-        ctx.lineWidth = 10;
+        ctx.lineWidth = lineWidth + 8;
         ctx.stroke();
         ctx.restore();
     }
-
+    ctx.fillStyle = fill;
+    ctx.fill();
     ctx.strokeStyle = stroke;
     ctx.lineWidth = lineWidth;
     ctx.stroke();
@@ -260,8 +263,7 @@ function fillWithShadowThenStroke(ctx, fill, stroke, lineWidth, hoverStroke) {
 function drawLabel(ctx, element, color) {
     if (!element.label) return;
     const b = getNodeBounds(element);
-    if (b.w === 0 || b.h === 0) return;
-    
+
     ctx.save();
     ctx.font = '14px Arial, sans-serif';
     ctx.fillStyle = color;
@@ -293,7 +295,7 @@ function drawLabel(ctx, element, color) {
     for (let i = 0; i < lines.length; i++) {
         ctx.fillText(lines[i], b.minX + b.w / 2, startY + i * lineHeight);
     }
-    
+
     ctx.restore();
 }
 
@@ -329,7 +331,7 @@ export function drawElement(ctx, element, opts = {}, allElements = []) {
     } else if (element.type === 'arrow') {
         const ends = getArrowEndpoints(element, allElements);
         if (!ends) return;
-        
+
         if (hoverStroke) {
             ctx.save();
             ctx.strokeStyle = hoverStroke;
@@ -341,6 +343,24 @@ export function drawElement(ctx, element, opts = {}, allElements = []) {
         ctx.strokeStyle = stroke;
         ctx.lineWidth = lineWidth + 1;
         drawArrowLine(ctx, ends.from.x, ends.from.y, ends.to.x, ends.to.y);
+    } else if (element.type === 'line') {
+        // Same as arrow but no head — just a stroke between the resolved
+        // endpoints. Reuses getArrowEndpoints (which handles every endpoint
+        // form lines also support).
+        const ends = getArrowEndpoints(element, allElements);
+        if (!ends) return;
+
+        if (hoverStroke) {
+            ctx.save();
+            ctx.strokeStyle = hoverStroke;
+            ctx.lineWidth = 10;
+            drawLine(ctx, ends.from.x, ends.from.y, ends.to.x, ends.to.y);
+            ctx.restore();
+        }
+
+        ctx.strokeStyle = stroke;
+        ctx.lineWidth = lineWidth + 1;
+        drawLine(ctx, ends.from.x, ends.from.y, ends.to.x, ends.to.y);
     } else if (element.type === 'text') {
         if (hoverStroke) {
             const b = getNodeBounds(element);
@@ -428,6 +448,16 @@ export function drawArrowLine(ctx, x1, y1, x2, y2) {
     ctx.stroke();
 }
 
+// Plain line — same primitive as drawArrowLine without the head. Kept as a
+// separate function so the renderer's per-frame call sites are explicit
+// about which one they want.
+export function drawLine(ctx, x1, y1, x2, y2) {
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+}
+
 export function drawAnchorDots(ctx, el) {
     const dots = getAnchorDots(el);
     ctx.fillStyle = '#ffffff';
@@ -448,6 +478,10 @@ export function buildExecutionOrder(starterId, elements) {
     elements.forEach(el => {
         if (isNodeType(el.type)) nodeById.set(el.id, el);
     });
+    // Only arrows participate in trace execution — lines are visual only,
+    // by design. (If you ever want lines to also act as directed traversal
+    // edges, change the type check below; the rest of the trace logic
+    // doesn't care which it is.)
     elements.forEach(el => {
         if (el.type === 'arrow' && el.fromId && el.toId) {
             if (!outgoing.has(el.fromId)) outgoing.set(el.fromId, []);

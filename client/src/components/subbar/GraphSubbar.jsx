@@ -6,6 +6,8 @@ import {
     Square,
     Circle,
     ArrowRight,
+    Minus,
+    Eraser,
     Type,
     Play,
     StopCircle,
@@ -14,11 +16,8 @@ import {
 
 // component functions
 export default function GraphSubbar({
-    activeMode,
-    setActiveMode,
     activeTool,
     setActiveTool,
-    // Data Chart props (optional — only used in dataChart mode)
     isRunning,
     onPlay,
     onStop,
@@ -34,7 +33,9 @@ export default function GraphSubbar({
         { id: 'rectangle', Icon: Square,        label: 'Rectangle' },
         { id: 'circle',    Icon: Circle,        label: 'Circle' },
         { id: 'arrow',     Icon: ArrowRight,    label: 'Arrow' },
+        { id: 'line',      Icon: Minus,         label: 'Line' },
         { id: 'text',      Icon: Type,          label: 'Text' },
+        { id: 'eraser',    Icon: Eraser,        label: 'Eraser' },
     ];
 
     return (
@@ -42,29 +43,6 @@ export default function GraphSubbar({
             <div style={{ display: 'flex', flexDirection: 'row', width: '100%', gap: '32px' }}>
 
                 <div className="subbar-section">
-                    <span className="subbar-label" style={{ textTransform: 'uppercase' }}>Mode</span>
-                    <div style={{ marginTop: '8px' }}>
-                        <select
-                            value={activeMode}
-                            onChange={(e) => setActiveMode(e.target.value)}
-                            style={{
-                                padding: '6px 12px',
-                                borderRadius: '6px',
-                                border: '1px solid var(--border)',
-                                background: 'transparent',
-                                color: 'var(--ink)',
-                                fontSize: '14px',
-                                cursor: 'pointer',
-                                outline: 'none',
-                            }}
-                        >
-                            <option value="whiteboard">Whiteboard</option>
-                            <option value="dataChart">Data Chart</option>
-                        </select>
-                    </div>
-                </div>
-
-                <div className="subbar-section" style={{ borderLeft: '1px solid var(--border)', paddingLeft: '32px' }}>
                     <span className="subbar-label" style={{ textTransform: 'uppercase' }}>Tools</span>
                     <div style={{ display: 'flex', flexDirection: 'row', gap: '8px', marginTop: '8px' }}>
                         {tools.map((tool) => {
@@ -94,24 +72,18 @@ export default function GraphSubbar({
                 </div>
 
                 <div className="subbar-section" style={{ borderLeft: '1px solid var(--border)', paddingLeft: '32px', flex: 1 }}>
-                    <span className="subbar-label" style={{ textTransform: 'uppercase' }}>Options</span>
+                    <span className="subbar-label" style={{ textTransform: 'uppercase' }}>Trace</span>
                     <div style={{ marginTop: '8px' }}>
-                        {activeMode === 'dataChart' ? (
-                            <DataChartOptions
-                                isRunning={isRunning}
-                                onPlay={onPlay}
-                                onStop={onStop}
-                                speed={speed}
-                                setSpeed={setSpeed}
-                                selectedId={selectedId}
-                                canSetStarter={canSetStarter}
-                                onSetStarter={onSetStarter}
-                            />
-                        ) : (
-                            <div className="subbar-placeholder" style={{ fontSize: '14px', color: 'var(--muted)' }}>
-                                {activeTool === 'text' ? 'Font Settings...' : 'Stroke & Fill...'}
-                            </div>
-                        )}
+                        <TraceControls
+                            isRunning={isRunning}
+                            onPlay={onPlay}
+                            onStop={onStop}
+                            speed={speed}
+                            setSpeed={setSpeed}
+                            selectedId={selectedId}
+                            canSetStarter={canSetStarter}
+                            onSetStarter={onSetStarter}
+                        />
                     </div>
                 </div>
 
@@ -120,7 +92,7 @@ export default function GraphSubbar({
     );
 }
 
-function DataChartOptions({ isRunning, onPlay, onStop, speed, setSpeed, selectedId, canSetStarter, onSetStarter }) {
+function TraceControls({ isRunning, onPlay, onStop, speed, setSpeed, selectedId, canSetStarter, onSetStarter }) {
     const btn = (active) => ({
         padding: '6px 10px',
         background: active ? 'var(--accent)' : 'transparent',
@@ -137,8 +109,8 @@ function DataChartOptions({ isRunning, onPlay, onStop, speed, setSpeed, selected
     return (
         <div style={{ display: 'flex', flexDirection: 'row', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
             {!isRunning ? (
-                <button onClick={onPlay} title="Run connections" style={btn(false)}>
-                    <Play size={14} /> Run
+                <button onClick={onPlay} title="Run a trace from the starter node" style={btn(false)}>
+                    <Play size={14} /> Run Trace
                 </button>
             ) : (
                 <button onClick={onStop} title="Stop" style={btn(true)}>

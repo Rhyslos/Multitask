@@ -3,6 +3,7 @@ import {
     drawElement,
     drawAnchorDots,
     drawArrowLine,
+    drawLine,
     drawResizeHandles,
     resolveAnchor,
     isNodeType,
@@ -11,10 +12,11 @@ import {
 export function renderCanvas(ctx, state) {
     const {
         width, height, camera, elements,
-        selectedId, starterId, highlightedIds,
+        selectedId, selectedIds, starterId, highlightedIds,
         activeTool, hoverNodeId, action, pendingConnection,
+        pendingMarquee,
         hoverEdgeNodeId,
-        peers,                        // { [clientId]: {user, cursor?, selection?, selectionBounds?} }
+        peers,
     } = state;
 
     ctx.clearRect(0, 0, width, height);
@@ -23,13 +25,21 @@ export function renderCanvas(ctx, state) {
     ctx.translate(camera.x, camera.y);
     ctx.scale(camera.zoom, camera.zoom);
 
+    // Selection set: prefer the multi-select set, fall back to the single
+    // id for callers that haven't been migrated. drawElement only knows
+    // about isSelected (boolean), so we compute it per-element.
+    const selSet = selectedIds && selectedIds.size > 0
+        ? selectedIds
+        : (selectedId ? new Set([selectedId]) : new Set());
+
     elements.forEach(el => drawElement(ctx, el, {
-        isSelected: el.id === selectedId,
+        isSelected: selSet.has(el.id),
         isHighlighted: highlightedIds?.has(el.id) || false,
         isStarter: el.id === starterId,
         isHovered: el.id === hoverEdgeNodeId,
     }, elements));
 
+    // Remote selection rings — drawn from peers' interpolated bounds.
     if (peers) {
         const ringsByTarget = new Map();
         for (const peerState of Object.values(peers)) {
@@ -77,21 +87,53 @@ export function renderCanvas(ctx, state) {
         if (node && isNodeType(node.type)) drawAnchorDots(ctx, node);
     }
 
-    if (activeTool === 'select' && selectedId) {
-        const sel = elements.find(e => e.id === selectedId);
+    // Resize handles only when exactly one node-type shape is selected.
+    // Multi-selection or arrow-only selection: no handles. Matches the
+    // resize action's gating in GraphActions.js.
+    if (activeTool === 'select' && selSet.size === 1) {
+        const onlyId = selSet.values().next().value;
+        const sel = elements.find(e => e.id === onlyId);
         if (sel && isNodeType(sel.type)) drawResizeHandles(ctx, sel);
     }
 
     if (action === 'connecting' && pendingConnection) {
-        const fromEl = elements.find(e => e.id === pendingConnection.fromId);
-        if (fromEl) {
-            const fromPt = resolveAnchor(fromEl, pendingConnection.fromAnchor);
+        let fromPt = null;
+        if (pendingConnection.fromPoint) {
+            fromPt = pendingConnection.fromPoint;
+        } else if (pendingConnection.fromId) {
+            const fromEl = elements.find(e => e.id === pendingConnection.fromId);
+            if (fromEl) fromPt = resolveAnchor(fromEl, pendingConnection.fromAnchor);
+        }
+
+        if (fromPt) {
             ctx.strokeStyle = '#3b82f6';
             ctx.lineWidth = 2;
             ctx.setLineDash([5, 5]);
-            drawArrowLine(ctx, fromPt.x, fromPt.y, pendingConnection.toPoint.x, pendingConnection.toPoint.y);
+            if (pendingConnection.kind === 'line') {
+                drawLine(ctx, fromPt.x, fromPt.y, pendingConnection.toPoint.x, pendingConnection.toPoint.y);
+            } else {
+                drawArrowLine(ctx, fromPt.x, fromPt.y, pendingConnection.toPoint.x, pendingConnection.toPoint.y);
+            }
             ctx.setLineDash([]);
         }
+    }
+
+    // Marquee selection box. Drawn in world space so it pans/zooms with
+    // the canvas. Translucent blue fill + dashed outline — matches Figma /
+    // Photoshop visual language.
+    if (pendingMarquee) {
+        const m = pendingMarquee;
+        const w = m.maxX - m.minX;
+        const h = m.maxY - m.minY;
+        ctx.save();
+        ctx.fillStyle = 'rgba(59, 130, 246, 0.08)';
+        ctx.fillRect(m.minX, m.minY, w, h);
+        ctx.strokeStyle = '#3b82f6';
+        ctx.lineWidth = 1 / camera.zoom;
+        ctx.setLineDash([6 / camera.zoom, 4 / camera.zoom]);
+        ctx.strokeRect(m.minX, m.minY, w, h);
+        ctx.setLineDash([]);
+        ctx.restore();
     }
 
     if (peers) {
@@ -105,13 +147,11 @@ export function renderCanvas(ctx, state) {
 }
 
 function drawRemoteCursor(ctx, x, y, user, zoom) {
-    // Scale-invariant: cursors stay the same on-screen size regardless of zoom.
     const s = 1 / zoom;
     ctx.save();
     ctx.translate(x, y);
     ctx.scale(s, s);
 
-    // Arrow shape — small triangle pointing up-left, like a real cursor.
     ctx.fillStyle = user.color || '#3b82f6';
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 1.5;
@@ -124,10 +164,6 @@ function drawRemoteCursor(ctx, x, y, user, zoom) {
     ctx.fill();
     ctx.stroke();
 
-    // Label. Prefer displayName (set by useGraphSync from user.displayName);
-    // fall back to email only if displayName isn't on the awareness payload
-    // for some reason. The fallback exists for resilience — fresh signups
-    // always have a displayName, but a stale cached user record could lack one.
     const label = user.displayName || user.email;
     if (label) {
         ctx.font = '11px Arial, sans-serif';

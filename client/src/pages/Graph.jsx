@@ -12,58 +12,78 @@ import useLocalOverrides, { applyOverrides } from '../hooks/useLocalOverrides';
 import useAwareness from '../hooks/useAwareness';
 import { makeGraphMutator } from '../components/graph/graphMutator';
 
-// Only these two modes are supported. Anything else gets clamped to 'whiteboard'.
-const VALID_MODES = ['whiteboard', 'dataChart'];
-
 // component functions
+//
+// Selection model: `selectedIds` is the source of truth, a Set<string>. The
+// legacy `setSelectedId` API is preserved as a wrapper that accepts a single
+// id, an array of ids, or null — so the dozens of call sites that pass a
+// single id keep working without changes. The first id (if any) is what we
+// broadcast over awareness; peers still see one ring per peer for now.
 export default function Graph() {
     const { workspaceID } = useParams();
     const { user } = useAuth();
-    const [activeMode, setActiveModeRaw] = useState('whiteboard');
     const [activeTool, setActiveTool] = useState('select');
 
-    // Guard against legacy persisted state or a subbar that hasn't been
-    // updated yet — if anything tries to set an unknown mode, snap back to
-    // whiteboard rather than entering a broken state.
-    const setActiveMode = useMemo(() => (m) => {
-        setActiveModeRaw(VALID_MODES.includes(m) ? m : 'whiteboard');
-    }, []);
-
-    // Yjs document + provider for this workspace.
     const { doc, yElements, awareness, connected, clientId } = useGraphSync(workspaceID, user);
-
-    // Plain-array snapshot of yElements for the renderer.
     const ySnapshot = useElementsView(yElements);
-
-    // Local overrides for in-flight drags (instant feedback without flooding network).
     const { overrides, localState } = useLocalOverrides();
-
-    // What the renderer actually draws: yElements snapshot with overrides applied.
     const elements = useMemo(() => applyOverrides(ySnapshot, overrides), [ySnapshot, overrides]);
 
-    // Mutator: the only way GraphActions writes to elements.
     const mutator = useMemo(() => {
         if (!doc || !yElements) return null;
         return makeGraphMutator(doc, yElements, localState);
     }, [doc, yElements, localState]);
 
-    // Awareness: cursors + remote selection rings.
     const { peers, broadcastCursor, broadcastSelection } = useAwareness(awareness, clientId);
 
-    // Clipboard for the canvas right-click "Paste here" action. Held at this
-    // level (rather than inside GraphCanvas) so duplicate / copy-style flows
-    // outside the canvas can share it later if needed.
     const [clipboard, setClipboard] = useState(null);
 
-    const [selectedId, setSelectedIdRaw] = useState(null);
-    const setSelectedId = useMemo(() => (id) => {
-        setSelectedIdRaw(id);
-        broadcastSelection(id);
+    // ── Selection ────────────────────────────────────────────────────
+    // Set is fine: typical selections are <100 elements, lookups are O(1),
+    // and we only replace the whole set on change (no in-place mutation).
+    const [selectedIds, setSelectedIdsRaw] = useState(() => new Set());
+
+    // Polymorphic setter. Accepts:
+    //   null          → clear
+    //   string        → single-select
+    //   string[]      → multi-select (replaces current)
+    //   Set<string>   → multi-select (replaces current)
+    //   (prev) => ... → functional update; receives the current Set
+    //
+    // Keeps the old `setSelectedId(id)` callers working unchanged.
+    const setSelectedId = useMemo(() => (next) => {
+        setSelectedIdsRaw(prev => {
+            let nextSet;
+            if (typeof next === 'function') {
+                const result = next(prev);
+                nextSet = result instanceof Set ? result : toSet(result);
+            } else {
+                nextSet = toSet(next);
+            }
+            // Broadcast the first id (or null) — awareness still single-id
+            // for now. When peers learn to render multi-selection, this is
+            // the one place that changes.
+            const first = nextSet.size > 0 ? nextSet.values().next().value : null;
+            broadcastSelection(first);
+            return nextSet;
+        });
     }, [broadcastSelection]);
+
+    // Convenience: the single "primary" id, used by code that still cares
+    // about one selection (resize handles, context menu target, set-as-starter).
+    // For multi-selection we expose the most-recently-added id, which matches
+    // user intent in most cases.
+    const selectedId = useMemo(() => {
+        if (selectedIds.size === 0) return null;
+        // Set iteration order = insertion order, so this is the last one added.
+        let last = null;
+        for (const id of selectedIds) last = id;
+        return last;
+    }, [selectedIds]);
 
     const [starterId, setStarterId] = useState(null);
 
-    // execution state
+    // Trace state — unchanged.
     const [isRunning, setIsRunning] = useState(false);
     const [speed, setSpeed] = useState(600);
     const [executionSteps, setExecutionSteps] = useState([]);
@@ -79,10 +99,6 @@ export default function Graph() {
         }
         return set;
     }, [executionSteps, stepIndex]);
-
-    useEffect(() => {
-        if (activeMode !== 'dataChart' && isRunning) handleStop();
-    }, [activeMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
     useEffect(() => {
         if (!isRunning) return;
@@ -131,13 +147,11 @@ export default function Graph() {
         return el && isNodeType(el.type);
     }, [selectedId, elements]);
 
-    const showSidePanel = activeMode === 'dataChart' && executionSteps.length > 0;
+    const showSidePanel = executionSteps.length > 0;
 
     return (
         <div className="graph-page-container" style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
             <GraphSubbar
-                activeMode={activeMode}
-                setActiveMode={setActiveMode}
                 activeTool={activeTool}
                 setActiveTool={setActiveTool}
                 isRunning={isRunning}
@@ -161,8 +175,9 @@ export default function Graph() {
                 }}
             >
                 <div style={{ position: 'absolute', top: 20, left: 20, color: '#aaa', zIndex: 10, pointerEvents: 'none' }}>
-                    Workspace: {workspaceID} | Mode: {activeMode} | Tool: {activeTool}
+                    Workspace: {workspaceID} | Tool: {activeTool}
                     {starterId && <> | Starter: ✓</>}
+                    {selectedIds.size > 1 && <> | {selectedIds.size} selected</>}
                     {' | '}
                     <span style={{ color: connected ? '#10b981' : '#ef4444' }}>
                         {connected ? '● live' : '● offline'}
@@ -173,10 +188,10 @@ export default function Graph() {
                     {mutator && (
                         <GraphCanvas
                             activeTool={activeTool}
-                            activeMode={activeMode}
                             elements={elements}
                             mutator={mutator}
                             selectedId={selectedId}
+                            selectedIds={selectedIds}
                             setSelectedId={setSelectedId}
                             starterId={starterId}
                             highlightedIds={highlightedIds}
@@ -199,4 +214,14 @@ export default function Graph() {
             </div>
         </div>
     );
+}
+
+// Coerce the polymorphic input to a Set<string>. Centralized so the setter
+// stays small and the conversion rules are in one place.
+function toSet(input) {
+    if (input == null) return new Set();
+    if (input instanceof Set) return new Set(input);
+    if (Array.isArray(input)) return new Set(input.filter(Boolean));
+    if (typeof input === 'string') return new Set([input]);
+    return new Set();
 }

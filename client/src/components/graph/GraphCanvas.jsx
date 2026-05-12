@@ -10,24 +10,22 @@ import { isHittingEdge, isNodeType, getNodeBounds } from './GraphHelper';
 
 export default function GraphCanvas({
     activeTool,
-    activeMode,
     elements,
     mutator,
     selectedId,
+    selectedIds,
     setSelectedId,
     starterId,
     highlightedIds,
     peers,
     broadcastCursor,
-    clipboard,           // { element } | null — owned by Graph.jsx
-    setClipboard,        // setter for the above
+    clipboard,
+    setClipboard,
 }) {
     const canvasRef = useRef(null);
     const [editingText, setEditingText] = useState(null);
     const [pendingConnection, setPendingConnection] = useState(null);
-    // Context menu state. `variant` distinguishes shape vs. canvas menus;
-    // `target` is the element clicked (shape variant) or null (canvas);
-    // `worldPos` is needed by canvas actions like paste-here / add-shape.
+    const [pendingMarquee, setPendingMarquee] = useState(null);
     const [contextMenu, setContextMenu] = useState(null);
 
     const { camera, setCamera, screenToWorld, resetView } = useCanvasCamera(canvasRef);
@@ -48,13 +46,16 @@ export default function GraphCanvas({
         canvasRef,
         elements,
         mutator,
-        selectedId, setSelectedId,
+        selectedId,
+        selectedIds,
+        setSelectedId,
         camera, setCamera, screenToWorld,
         activeTool,
         editingText,
         setPendingConnection,
+        setPendingMarquee,
         broadcastCursor,
-        suppressHover: !!contextMenu,  // freeze hover state while menu is open
+        suppressHover: !!contextMenu,
     });
 
     useLayoutEffect(() => {
@@ -67,27 +68,23 @@ export default function GraphCanvas({
             camera,
             elements,
             selectedId,
+            selectedIds,
             starterId,
             highlightedIds,
             activeTool,
             hoverNodeId,
             action: pendingConnection ? 'connecting' : null,
             pendingConnection,
+            pendingMarquee,
             hoverEdgeNodeId,
             peers: peersForRender,
         });
     }, [
-        camera, elements, selectedId, starterId, highlightedIds, activeTool,
-        hoverNodeId, pendingConnection, hoverEdgeNodeId,
+        camera, elements, selectedId, selectedIds, starterId, highlightedIds, activeTool,
+        hoverNodeId, pendingConnection, pendingMarquee, hoverEdgeNodeId,
         peersForRender, tick,
     ]);
 
-    // ───────────────────────────────────────────────────────────────
-    // Right-click → context menu
-    //
-    // Ignored while a drag is active or while editing text. Hit-tests in
-    // reverse z-order (same as selectMove) so the top-most shape wins.
-    // ───────────────────────────────────────────────────────────────
     const handleContextMenu = useCallback((e) => {
         e.preventDefault();
         if (editingText || isActive()) return;
@@ -100,10 +97,10 @@ export default function GraphCanvas({
         );
 
         if (hit) {
-            // Right-click implicitly selects the target. Matches every
-            // graphics tool (Figma, Illustrator, etc.) — users expect the
-            // shape to be visibly the focus while the menu is open.
-            setSelectedId(hit.id);
+            // Right-click never modifies the selection — the menu operates
+            // on the right-clicked shape, leaving any existing multi-select
+            // alone. This means you can right-click a shape outside your
+            // marquee selection without losing it.
             setContextMenu({
                 variant: 'shape',
                 screenPos: { x: clientX, y: clientY },
@@ -118,52 +115,73 @@ export default function GraphCanvas({
                 target: null,
             });
         }
-    }, [editingText, isActive, elements, screenToWorld, setSelectedId]);
+    }, [editingText, isActive, elements, screenToWorld]);
 
-    // ───────────────────────────────────────────────────────────────
-    // Context menu actions. Each handler captures the target from the
-    // open menu state — we don't trust selectedId here because some flows
-    // (canvas menu paste-here) don't involve selection.
-    // ───────────────────────────────────────────────────────────────
+    // The context menu always operates on just the right-clicked shape.
+    // The current selection is never touched by right-click, and menu
+    // actions don't read it — this keeps right-click predictable:
+    // "what I clicked is what gets affected", no matter what else is selected.
+    const operativeIds = () => {
+        const id = contextMenu?.target?.id;
+        return id ? [id] : [];
+    };
+
     const actions = {
         onDelete: () => {
-            const id = contextMenu?.target?.id;
-            if (!id) return;
-            // Mirror useCanvasPointer's keyboard delete: cascade connected arrows.
-            const ids = [id];
+            const ids = operativeIds();
+            if (ids.length === 0) return;
+            const all = new Set(ids);
             for (const el of elements) {
-                if (el.type === 'arrow' && (el.fromId === id || el.toId === id)) {
-                    ids.push(el.id);
+                if ((el.type === 'arrow' || el.type === 'line') &&
+                    (all.has(el.fromId) || all.has(el.toId))) {
+                    all.add(el.id);
                 }
             }
-            mutator.removeMany(ids);
+            mutator.removeMany([...all]);
             setSelectedId(null);
         },
         onDuplicate: () => {
-            const target = contextMenu?.target;
-            if (!target) return;
-            // Stash a clipboard entry too, so the user's "duplicate" flow
-            // also seeds paste — same gesture in spirit.
-            setClipboard({ element: target });
-            const newId = mutator.duplicate(target.id);
-            if (newId) setSelectedId(newId);
+            const ids = operativeIds();
+            if (ids.length === 0) return;
+            // Single-target duplicate also stashes clipboard; multi just
+            // duplicates each in place. The duplicates become the new
+            // selection so the user can immediately drag them.
+            if (ids.length === 1) {
+                const target = elements.find(e => e.id === ids[0]);
+                if (target) setClipboard({ element: target });
+            }
+            const newIds = [];
+            for (const id of ids) {
+                const newId = mutator.duplicate(id);
+                if (newId) newIds.push(newId);
+            }
+            if (newIds.length > 0) setSelectedId(newIds);
         },
+        // Z-order ops apply to the right-clicked target only — group z-order
+        // semantics are ambiguous (do you keep relative order? collapse to
+        // a single layer?) and rarely useful here. Single-target keeps the
+        // contract predictable.
         onBringToFront: () => contextMenu?.target && mutator.bringToFront(contextMenu.target.id),
         onBringForward: () => contextMenu?.target && mutator.bringForward(contextMenu.target.id),
         onSendBackward: () => contextMenu?.target && mutator.sendBackward(contextMenu.target.id),
         onSendToBack:   () => contextMenu?.target && mutator.sendToBack(contextMenu.target.id),
         onChangeColor: (hex) => {
-            // Persists the color on the element. The renderer doesn't yet
-            // read this field — when it does, existing data is ready.
-            if (contextMenu?.target) mutator.changeColor(contextMenu.target.id, hex);
+            const ids = operativeIds();
+            for (const id of ids) mutator.changeColor(id, hex);
         },
         onChangeType: (type) => {
-            if (contextMenu?.target) mutator.changeType(contextMenu.target.id, type);
+            const ids = operativeIds();
+            for (const id of ids) {
+                const el = elements.find(e => e.id === id);
+                // Only rectangle ↔ circle are convertible; skip non-shape types.
+                if (el && (el.type === 'rectangle' || el.type === 'circle')) {
+                    mutator.changeType(id, type);
+                }
+            }
         },
         onPaste: (worldPos) => {
             if (!clipboard?.element || !worldPos) return;
             const src = clipboard.element;
-            // Paste arrives at the click point, not src+offset like Duplicate.
             const copy = {
                 ...src,
                 id: crypto.randomUUID(),
@@ -176,8 +194,6 @@ export default function GraphCanvas({
         onAddShape: (type, worldPos) => {
             if (!worldPos) return;
             if (type === 'text') {
-                // Reuse the editing-text path so the user gets to type immediately,
-                // same as clicking with the Text tool.
                 setEditingText({
                     mode: 'newText',
                     id: crypto.randomUUID(),
@@ -189,8 +205,6 @@ export default function GraphCanvas({
                 return;
             }
             const id = crypto.randomUUID();
-            // Default size for shapes added via menu — drag-to-draw isn't
-            // available here, so we pick a comfortable starting bound.
             mutator.create({
                 id,
                 type,
@@ -204,10 +218,6 @@ export default function GraphCanvas({
     };
 
     const handleCanvasPointerDown = (e) => {
-        // Close any open context menu when the user clicks anywhere on the
-        // canvas. The menu's own outside-mousedown listener handles this
-        // too, but doing it here means the pointer-down also begins a drag
-        // / selection seamlessly.
         if (contextMenu) setContextMenu(null);
 
         if (activeTool === 'text' && !isActive() && !editingText) {
@@ -306,14 +316,16 @@ export default function GraphCanvas({
         canvasCursor = activeCursor;
     } else if (activeTool === 'hand') {
         canvasCursor = 'grab';
+    } else if (activeTool === 'eraser') {
+        canvasCursor = 'cell';
     } else if (activeTool === 'select' && hoverHandle) {
         canvasCursor = hoverHandle.cursor;
     } else if (hoverLabelNodeId) {
         canvasCursor = 'text';
     } else if (activeTool === 'text') {
         canvasCursor = 'text';
-    } else if (activeTool === 'arrow') {
-        canvasCursor = hoverNodeId ? 'crosshair' : 'default';
+    } else if (activeTool === 'arrow' || activeTool === 'line') {
+        canvasCursor = 'crosshair';
     } else if (activeTool === 'select' && hoverEdgeNodeId) {
         canvasCursor = 'move';
     } else if (activeTool === 'select') {

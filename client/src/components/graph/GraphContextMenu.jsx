@@ -1,57 +1,18 @@
-// Right-click context menu for the graph canvas. Two variants:
-//
-//   - 'shape':  opened on a shape. Operates on `targetId`. Shows delete,
-//               duplicate, z-order, change color (stub), change type.
-//   - 'canvas': opened on empty canvas. Operates at `worldPos`. Shows
-//               paste (if clipboard is set), add rectangle/circle/text.
-//
-// The menu lives in screen coordinates (fixed position) and never zooms
-// with the camera — same as Figma / Excalidraw. Positioning is edge-aware:
-// if the menu would overflow the viewport, it flips. Submenus do the same.
-//
-// Closure rules: outside-click, Escape, scroll, window blur, or any action
-// selection. The parent owns the `open/closed` state; this component just
-// renders and calls `onClose` when the user dismisses it.
-//
-// Why this lives in screen space (not canvas world space): the menu is a
-// DOM element, not a canvas paint. Mixing canvas-rendered UI with a fixed
-// HTML overlay is the pragmatic move — accessibility, hit-testing,
-// keyboard nav, and text rendering all come for free.
+// Right-click context menu for the graph canvas.
 
 import { useEffect, useRef, useState, useLayoutEffect } from 'react';
 import { isNodeType } from './GraphHelper';
+import { STROKES, FILLS, NO_STROKE, NO_FILL } from './graphColors';
 
 const MENU_WIDTH = 200;
-const SUBMENU_WIDTH = 160;
-// Approx. height per row + padding. Used for overflow detection only —
-// actual height is whatever the DOM lays out, so this is a hint, not truth.
-const ROW_HEIGHT = 32;
-
-// Stub palette for "Change color". The action is wired but a no-op for
-// now per the spec — clicking just closes the menu. When color persistence
-// lands, replace the no-op with mutator.update(id, { color: hex }).
-const COLOR_SWATCHES = [
-    '#ef4444', '#f59e0b', '#10b981', '#3b82f6',
-    '#8b5cf6', '#ec4899', '#6b7280', '#1e1e1e',
-];
+const COLOR_SUBMENU_WIDTH = 220;
+const TYPE_SUBMENU_WIDTH = 160;
 
 const SHAPE_TYPES_FOR_TYPE_CHANGE = [
     { type: 'rectangle', label: 'Rectangle' },
     { type: 'circle',    label: 'Circle' },
 ];
 
-/**
- * @param {object}   props
- * @param {'shape'|'canvas'} props.variant
- * @param {{x:number,y:number}} props.screenPos - viewport-relative click point
- * @param {{x:number,y:number}|null} props.worldPos - world coords (canvas variant only)
- * @param {object|null} props.target - element being acted on (shape variant only)
- * @param {boolean}  props.hasClipboard - whether paste should be enabled
- * @param {object}   props.actions - { onDelete, onDuplicate, onBringToFront, onBringForward,
- *                                     onSendBackward, onSendToBack, onChangeColor, onChangeType,
- *                                     onPaste, onAddShape }
- * @param {() => void} props.onClose
- */
 export default function GraphContextMenu({
     variant,
     screenPos,
@@ -63,10 +24,8 @@ export default function GraphContextMenu({
 }) {
     const rootRef = useRef(null);
     const [adjustedPos, setAdjustedPos] = useState(screenPos);
-    const [openSubmenu, setOpenSubmenu] = useState(null); // 'color' | 'type' | null
+    const [openSubmenu, setOpenSubmenu] = useState(null);
 
-    // Reposition if the menu would overflow the viewport. We do this in a
-    // layout effect so the user never sees a flash at the original position.
     useLayoutEffect(() => {
         const el = rootRef.current;
         if (!el) return;
@@ -80,20 +39,12 @@ export default function GraphContextMenu({
         setAdjustedPos({ x, y });
     }, [screenPos.x, screenPos.y]);
 
-    // Closure listeners. We use mousedown rather than click so the menu
-    // closes before the click hits anything else — prevents "click through"
-    // where a single right-click + left-click could both open and dismiss.
     useEffect(() => {
         function handleMouseDown(e) {
-            if (rootRef.current && !rootRef.current.contains(e.target)) {
-                onClose();
-            }
+            if (rootRef.current && !rootRef.current.contains(e.target)) onClose();
         }
         function handleKeyDown(e) {
-            if (e.key === 'Escape') {
-                e.preventDefault();
-                onClose();
-            }
+            if (e.key === 'Escape') { e.preventDefault(); onClose(); }
         }
         function handleScroll() { onClose(); }
         function handleBlur() { onClose(); }
@@ -101,8 +52,6 @@ export default function GraphContextMenu({
         document.addEventListener('mousedown', handleMouseDown);
         document.addEventListener('keydown', handleKeyDown);
         window.addEventListener('blur', handleBlur);
-        // Capture phase for scroll: a nested scroll container shouldn't keep
-        // the menu visible while content moves underneath it.
         window.addEventListener('scroll', handleScroll, true);
         return () => {
             document.removeEventListener('mousedown', handleMouseDown);
@@ -112,9 +61,8 @@ export default function GraphContextMenu({
         };
     }, [onClose]);
 
-    // Helper: wrap an action so we always close the menu after running it.
-    // Submenu actions stay open until the user picks a value, then this
-    // closes everything. Hover-to-open submenus don't trigger this.
+    // Wrap an action so the menu closes after it runs. Color picks use this
+    // (one click → applied + closed). Hover-to-open submenus don't.
     const run = (fn) => (...args) => {
         try { fn?.(...args); } finally { onClose(); }
     };
@@ -122,6 +70,9 @@ export default function GraphContextMenu({
     const isShape = variant === 'shape';
     const targetIsNode = isShape && target && isNodeType(target.type);
     const canChangeType = isShape && target && (target.type === 'rectangle' || target.type === 'circle');
+    // Lines and arrows have a stroke but no meaningful fill, so the color
+    // submenu hides the Background section for them.
+    const targetHasFill = isShape && target && isNodeType(target.type);
 
     return (
         <div
@@ -143,9 +94,6 @@ export default function GraphContextMenu({
                 zIndex: 1000,
                 userSelect: 'none',
             }}
-            // Suppress the browser's own context menu if the user right-clicks
-            // again on the menu itself. Otherwise you'd get the system menu
-            // on top of ours.
             onContextMenu={(e) => e.preventDefault()}
         >
             {isShape && (
@@ -158,21 +106,22 @@ export default function GraphContextMenu({
                     <MenuItem label="Send Backward" onClick={run(actions.onSendBackward)} />
                     <MenuItem label="Send to Back" onClick={run(actions.onSendToBack)} />
                     <Divider />
-                    {targetIsNode && (
-                        <MenuItem
-                            label="Change Color"
-                            hasSubmenu
-                            isSubmenuOpen={openSubmenu === 'color'}
-                            onMouseEnter={() => setOpenSubmenu('color')}
-                            onMouseLeave={() => { /* keep open until another item is hovered */ }}
-                        >
-                            {openSubmenu === 'color' && (
-                                <ColorSubmenu
-                                    onPick={(hex) => run(actions.onChangeColor)(hex)}
-                                />
-                            )}
-                        </MenuItem>
-                    )}
+                    <MenuItem
+                        label="Colors"
+                        hasSubmenu
+                        isSubmenuOpen={openSubmenu === 'color'}
+                        onMouseEnter={() => setOpenSubmenu('color')}
+                    >
+                        {openSubmenu === 'color' && (
+                            <ColorPanel
+                                currentStroke={target?.stroke}
+                                currentFill={target?.fill}
+                                showFill={targetHasFill}
+                                onPickStroke={(hex) => run(actions.onSetStroke)(hex)}
+                                onPickFill={(hex) => run(actions.onSetFill)(hex)}
+                            />
+                        )}
+                    </MenuItem>
                     {canChangeType && (
                         <MenuItem
                             label="Change Type"
@@ -218,10 +167,6 @@ export default function GraphContextMenu({
     );
 }
 
-// ───────────────────────────────────────────────────────────────
-// Internal pieces
-// ───────────────────────────────────────────────────────────────
-
 function MenuItem({
     label, shortcut, onClick, disabled, hasSubmenu, isSubmenuOpen,
     onMouseEnter, onMouseLeave, children,
@@ -258,45 +203,122 @@ function Divider() {
     return <div style={{ height: 1, background: '#e5e7eb', margin: '4px 0' }} />;
 }
 
-function ColorSubmenu({ onPick }) {
+// Two-section color panel. Top row is "Line" (bright strokes), bottom row
+// is "Background" (pastels). Both sections include a "none" tile that maps
+// to the sentinel. The currently-selected value (matching element.stroke /
+// element.fill) gets a highlighted border.
+//
+// The panel is wider than a typical submenu, which is why COLOR_SUBMENU_WIDTH
+// is its own constant. If the element doesn't support fills (lines, arrows),
+// the Background section is hidden entirely instead of disabled — saves
+// visual noise.
+function ColorPanel({ currentStroke, currentFill, showFill, onPickStroke, onPickFill }) {
     return (
         <div
             style={{
                 ...submenuStyle(),
-                width: SUBMENU_WIDTH,
-                display: 'grid',
-                gridTemplateColumns: 'repeat(4, 1fr)',
-                gap: 6,
-                padding: 8,
+                width: COLOR_SUBMENU_WIDTH,
+                padding: 10,
             }}
-            // Stop hover from bubbling back to the parent MenuItem and
-            // triggering its background highlight unexpectedly.
             onMouseEnter={(e) => e.stopPropagation()}
         >
-            {COLOR_SWATCHES.map(hex => (
-                <button
-                    key={hex}
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); onPick(hex); }}
-                    style={{
-                        width: 28,
-                        height: 28,
-                        background: hex,
-                        border: '1px solid #e5e7eb',
-                        borderRadius: 4,
-                        cursor: 'pointer',
-                        padding: 0,
-                    }}
-                    aria-label={`Set color ${hex}`}
-                />
-            ))}
+            <ColorSection
+                label="Line"
+                swatches={STROKES}
+                current={currentStroke}
+                noneValue={NO_STROKE}
+                noneLabel="No line"
+                onPick={onPickStroke}
+            />
+            {showFill && (
+                <>
+                    <div style={{ height: 8 }} />
+                    <ColorSection
+                        label="Background"
+                        swatches={FILLS}
+                        current={currentFill}
+                        noneValue={NO_FILL}
+                        noneLabel="No fill"
+                        onPick={onPickFill}
+                    />
+                </>
+            )}
         </div>
+    );
+}
+
+function ColorSection({ label, swatches, current, noneValue, noneLabel, onPick }) {
+    return (
+        <div>
+            <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                {label}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6 }}>
+                {swatches.map(({ name, hex }) => (
+                    <Swatch
+                        key={name}
+                        hex={hex}
+                        isSelected={current === hex}
+                        onClick={(e) => { e.stopPropagation(); onPick(hex); }}
+                        ariaLabel={`${label} ${name}`}
+                    />
+                ))}
+                <Swatch
+                    hex="transparent"
+                    isNone
+                    isSelected={current === noneValue}
+                    onClick={(e) => { e.stopPropagation(); onPick(noneValue); }}
+                    ariaLabel={noneLabel}
+                />
+            </div>
+        </div>
+    );
+}
+
+function Swatch({ hex, isSelected, isNone, onClick, ariaLabel }) {
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            aria-label={ariaLabel}
+            style={{
+                width: 28,
+                height: 28,
+                background: isNone ? '#ffffff' : hex,
+                // Selection ring: a 2px outline in accent blue. We use
+                // outline rather than border so the swatch size doesn't
+                // shift when (de)selected.
+                border: '1px solid #e5e7eb',
+                outline: isSelected ? '2px solid #3b82f6' : 'none',
+                outlineOffset: '1px',
+                borderRadius: 4,
+                cursor: 'pointer',
+                padding: 0,
+                position: 'relative',
+                overflow: 'hidden',
+            }}
+        >
+            {isNone && (
+                // Diagonal red slash to indicate "none". Drawn as a rotated
+                // span so it scales cleanly without needing an SVG asset.
+                <span style={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '-10%',
+                    width: '120%',
+                    height: 2,
+                    background: '#ef4444',
+                    transform: 'rotate(-45deg)',
+                    transformOrigin: 'center',
+                }} />
+            )}
+        </button>
     );
 }
 
 function TypeSubmenu({ currentType, onPick }) {
     return (
-        <div style={{ ...submenuStyle(), width: SUBMENU_WIDTH }}>
+        <div style={{ ...submenuStyle(), width: TYPE_SUBMENU_WIDTH }}>
             {SHAPE_TYPES_FOR_TYPE_CHANGE.map(({ type, label }) => (
                 <div
                     key={type}
@@ -324,9 +346,6 @@ function TypeSubmenu({ currentType, onPick }) {
 function submenuStyle() {
     return {
         position: 'absolute',
-        // Open to the right of the parent row. Edge-flip isn't implemented
-        // for submenus — the main menu's repositioning usually saves us,
-        // and we're not at the right edge often enough to invest more.
         top: 0,
         left: '100%',
         background: '#ffffff',

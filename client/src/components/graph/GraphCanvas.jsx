@@ -97,10 +97,6 @@ export default function GraphCanvas({
         );
 
         if (hit) {
-            // Right-click never modifies the selection — the menu operates
-            // on the right-clicked shape, leaving any existing multi-select
-            // alone. This means you can right-click a shape outside your
-            // marquee selection without losing it.
             setContextMenu({
                 variant: 'shape',
                 screenPos: { x: clientX, y: clientY },
@@ -117,10 +113,9 @@ export default function GraphCanvas({
         }
     }, [editingText, isActive, elements, screenToWorld]);
 
-    // The context menu always operates on just the right-clicked shape.
-    // The current selection is never touched by right-click, and menu
-    // actions don't read it — this keeps right-click predictable:
-    // "what I clicked is what gets affected", no matter what else is selected.
+    // Right-click always operates on the clicked target — selection is
+    // untouched. Keyboard delete still hits the whole selection (in
+    // useCanvasPointer.jsx); that asymmetry is intentional.
     const operativeIds = () => {
         const id = contextMenu?.target?.id;
         return id ? [id] : [];
@@ -143,9 +138,6 @@ export default function GraphCanvas({
         onDuplicate: () => {
             const ids = operativeIds();
             if (ids.length === 0) return;
-            // Single-target duplicate also stashes clipboard; multi just
-            // duplicates each in place. The duplicates become the new
-            // selection so the user can immediately drag them.
             if (ids.length === 1) {
                 const target = elements.find(e => e.id === ids[0]);
                 if (target) setClipboard({ element: target });
@@ -157,23 +149,22 @@ export default function GraphCanvas({
             }
             if (newIds.length > 0) setSelectedId(newIds);
         },
-        // Z-order ops apply to the right-clicked target only — group z-order
-        // semantics are ambiguous (do you keep relative order? collapse to
-        // a single layer?) and rarely useful here. Single-target keeps the
-        // contract predictable.
         onBringToFront: () => contextMenu?.target && mutator.bringToFront(contextMenu.target.id),
         onBringForward: () => contextMenu?.target && mutator.bringForward(contextMenu.target.id),
         onSendBackward: () => contextMenu?.target && mutator.sendBackward(contextMenu.target.id),
         onSendToBack:   () => contextMenu?.target && mutator.sendToBack(contextMenu.target.id),
-        onChangeColor: (hex) => {
-            const ids = operativeIds();
-            for (const id of ids) mutator.changeColor(id, hex);
+        // Split out: stroke (line color) and fill (background) are independent.
+        // The menu picker calls these directly with hex strings or the
+        // NO_STROKE / NO_FILL sentinels from graphColors.
+        onSetStroke: (hex) => {
+            for (const id of operativeIds()) mutator.setStroke(id, hex);
+        },
+        onSetFill: (hex) => {
+            for (const id of operativeIds()) mutator.setFill(id, hex);
         },
         onChangeType: (type) => {
-            const ids = operativeIds();
-            for (const id of ids) {
+            for (const id of operativeIds()) {
                 const el = elements.find(e => e.id === id);
-                // Only rectangle ↔ circle are convertible; skip non-shape types.
                 if (el && (el.type === 'rectangle' || el.type === 'circle')) {
                     mutator.changeType(id, type);
                 }

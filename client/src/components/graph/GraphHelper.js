@@ -1,4 +1,6 @@
 // user functions
+import { resolveColors, HOVER_STROKE } from './graphColors';
+
 export function getDistanceToLine(px, py, x1, y1, x2, y2) {
     const A = px - x1;
     const B = py - y1;
@@ -111,9 +113,6 @@ export function getAnchorFromPoint(el, px, py, tol = 12) {
     return { side: best.side, t: Math.max(0, Math.min(1, best.t)) };
 }
 
-// Lines and arrows are connection-type elements; rectangles, circles, and
-// text are node-type. Only node-types support resize handles, anchors, and
-// labels-via-double-click.
 export function isNodeType(type) {
     return type === 'rectangle' || type === 'circle' || type === 'text';
 }
@@ -143,9 +142,6 @@ export function isHittingLabel(px, py, el) {
 export function isHittingEdge(px, py, el, allElements) {
     const tol = 10;
 
-    // Arrow and line use identical hit-testing: distance from the point to
-    // the segment between the resolved endpoints. The arrowhead is small
-    // enough not to matter; both feel the same to click.
     if (el.type === 'arrow' || el.type === 'line') {
         const ends = getArrowEndpoints(el, allElements);
         if (!ends) return false;
@@ -180,12 +176,6 @@ export function isHittingEdge(px, py, el, allElements) {
     return false;
 }
 
-// Resolves both endpoints of an arrow or line to world coordinates. Handles
-// all four endpoint forms: anchored ({fromId, fromAnchor}), free
-// ({fromPoint}), and the legacy x/y/width-height encoding used by some
-// existing data. Despite the name, this is used for lines too — keeping the
-// name avoids touching every caller, but the contract is "resolve connection
-// endpoints".
 export function getArrowEndpoints(arrow, allElements) {
     let from, to;
 
@@ -212,16 +202,11 @@ export function getArrowEndpoints(arrow, allElements) {
     return { from, to };
 }
 
-const COLOR_DEFAULT   = '#1e1e1e';
-const COLOR_SELECTED  = '#3b82f6';
-const COLOR_HIGHLIGHT = '#f59e0b';
-const COLOR_STARTER   = '#10b981';
-const COLOR_HOVER     = 'rgba(59, 130, 246, 0.3)';
-const FILL_DEFAULT    = '#fafaf9';
-const FILL_HIGHLIGHT  = '#fef3c7';
-const FILL_STARTER    = '#ecfdf5';
-const FILL_SELECTED   = '#eff6ff';
-const CORNER_RADIUS   = 8;
+// Replaces the inline color/state if-else that used to live in drawElement.
+// The colors come from graphColors.resolveColors — drawing primitives no
+// longer hardcode hex values. Hover overlay logic is left here since it's
+// strictly a renderer effect, not part of the element's persistent state.
+const CORNER_RADIUS = 8;
 
 function effectiveRadius(w, h) {
     return Math.min(CORNER_RADIUS, Math.abs(w) / 2, Math.abs(h) / 2);
@@ -245,19 +230,26 @@ function roundedRectPath(ctx, x, y, w, h, r) {
     ctx.closePath();
 }
 
-function fillWithShadowThenStroke(ctx, fill, stroke, lineWidth, hoverStroke) {
+// Paint a filled-and-stroked shape. Path must already be built in ctx.
+// Reads skipFill/skipStroke from the resolved color set so transparent fills
+// and stroke-less shapes work without extra branching at every call site.
+function paintShape(ctx, colors, hoverStroke) {
     if (hoverStroke) {
         ctx.save();
         ctx.strokeStyle = hoverStroke;
-        ctx.lineWidth = lineWidth + 8;
+        ctx.lineWidth = colors.lineWidth + 8;
         ctx.stroke();
         ctx.restore();
     }
-    ctx.fillStyle = fill;
-    ctx.fill();
-    ctx.strokeStyle = stroke;
-    ctx.lineWidth = lineWidth;
-    ctx.stroke();
+    if (!colors.skipFill) {
+        ctx.fillStyle = colors.fill;
+        ctx.fill();
+    }
+    if (!colors.skipStroke) {
+        ctx.strokeStyle = colors.stroke;
+        ctx.lineWidth = colors.lineWidth;
+        ctx.stroke();
+    }
 }
 
 function drawLabel(ctx, element, color) {
@@ -301,15 +293,8 @@ function drawLabel(ctx, element, color) {
 
 export function drawElement(ctx, element, opts = {}, allElements = []) {
     const { isSelected = false, isHighlighted = false, isStarter = false, isHovered = false } = opts;
-
-    let stroke = COLOR_DEFAULT;
-    let fill = FILL_DEFAULT;
-    let lineWidth = 1.5;
-    if (isHighlighted)     { stroke = COLOR_HIGHLIGHT; fill = FILL_HIGHLIGHT; lineWidth = 2.5; }
-    else if (isSelected)   { stroke = COLOR_SELECTED;  fill = FILL_SELECTED;  lineWidth = 2; }
-    else if (isStarter)    { stroke = COLOR_STARTER;   fill = FILL_STARTER;   lineWidth = 2; }
-
-    const hoverStroke = (isHovered && !isSelected) ? COLOR_HOVER : null;
+    const colors = resolveColors(element, { isSelected, isHighlighted, isStarter });
+    const hoverStroke = (isHovered && !isSelected) ? HOVER_STROKE : null;
 
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
@@ -317,8 +302,8 @@ export function drawElement(ctx, element, opts = {}, allElements = []) {
     if (element.type === 'rectangle') {
         const r = effectiveRadius(element.width, element.height);
         roundedRectPath(ctx, element.x, element.y, element.width, element.height, r);
-        fillWithShadowThenStroke(ctx, fill, stroke, lineWidth, hoverStroke);
-        drawLabel(ctx, element, stroke);
+        paintShape(ctx, colors, hoverStroke);
+        drawLabel(ctx, element, colors.stroke);
     } else if (element.type === 'circle') {
         const radiusX = Math.abs(element.width) / 2;
         const radiusY = Math.abs(element.height) / 2;
@@ -326,11 +311,12 @@ export function drawElement(ctx, element, opts = {}, allElements = []) {
         const centerY = element.y + element.height / 2;
         ctx.beginPath();
         ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, 2 * Math.PI);
-        fillWithShadowThenStroke(ctx, fill, stroke, lineWidth, hoverStroke);
-        drawLabel(ctx, element, stroke);
+        paintShape(ctx, colors, hoverStroke);
+        drawLabel(ctx, element, colors.stroke);
     } else if (element.type === 'arrow') {
         const ends = getArrowEndpoints(element, allElements);
         if (!ends) return;
+        if (colors.skipStroke) return; // arrow with no stroke is invisible
 
         if (hoverStroke) {
             ctx.save();
@@ -339,16 +325,13 @@ export function drawElement(ctx, element, opts = {}, allElements = []) {
             drawArrowLine(ctx, ends.from.x, ends.from.y, ends.to.x, ends.to.y);
             ctx.restore();
         }
-
-        ctx.strokeStyle = stroke;
-        ctx.lineWidth = lineWidth + 1;
+        ctx.strokeStyle = colors.stroke;
+        ctx.lineWidth = colors.lineWidth + 1;
         drawArrowLine(ctx, ends.from.x, ends.from.y, ends.to.x, ends.to.y);
     } else if (element.type === 'line') {
-        // Same as arrow but no head — just a stroke between the resolved
-        // endpoints. Reuses getArrowEndpoints (which handles every endpoint
-        // form lines also support).
         const ends = getArrowEndpoints(element, allElements);
         if (!ends) return;
+        if (colors.skipStroke) return;
 
         if (hoverStroke) {
             ctx.save();
@@ -357,9 +340,8 @@ export function drawElement(ctx, element, opts = {}, allElements = []) {
             drawLine(ctx, ends.from.x, ends.from.y, ends.to.x, ends.to.y);
             ctx.restore();
         }
-
-        ctx.strokeStyle = stroke;
-        ctx.lineWidth = lineWidth + 1;
+        ctx.strokeStyle = colors.stroke;
+        ctx.lineWidth = colors.lineWidth + 1;
         drawLine(ctx, ends.from.x, ends.from.y, ends.to.x, ends.to.y);
     } else if (element.type === 'text') {
         if (hoverStroke) {
@@ -368,7 +350,9 @@ export function drawElement(ctx, element, opts = {}, allElements = []) {
             ctx.fillRect(b.minX - 6, b.minY - 6, b.w + 12, b.h + 12);
         }
         ctx.font = '16px Arial, sans-serif';
-        ctx.fillStyle = stroke;
+        // Text uses the stroke color as its ink color — pastels would be
+        // illegible on a typical canvas background.
+        ctx.fillStyle = colors.stroke;
         ctx.textBaseline = 'top';
         ctx.fillText(element.text, element.x, element.y);
     }
@@ -400,7 +384,9 @@ export function getHandleAtPoint(el, px, py) {
 export function drawResizeHandles(ctx, el) {
     const handles = getResizeHandles(el);
     ctx.fillStyle = '#ffffff';
-    ctx.strokeStyle = COLOR_SELECTED;
+    // Hardcoded selected-state stroke — handles are themselves a selection
+    // affordance, so they don't follow user color choices.
+    ctx.strokeStyle = '#3b82f6';
     ctx.lineWidth = 1.5;
     handles.forEach(h => {
         const half = h.size / 2;
@@ -448,9 +434,6 @@ export function drawArrowLine(ctx, x1, y1, x2, y2) {
     ctx.stroke();
 }
 
-// Plain line — same primitive as drawArrowLine without the head. Kept as a
-// separate function so the renderer's per-frame call sites are explicit
-// about which one they want.
 export function drawLine(ctx, x1, y1, x2, y2) {
     ctx.beginPath();
     ctx.moveTo(x1, y1);
@@ -461,7 +444,7 @@ export function drawLine(ctx, x1, y1, x2, y2) {
 export function drawAnchorDots(ctx, el) {
     const dots = getAnchorDots(el);
     ctx.fillStyle = '#ffffff';
-    ctx.strokeStyle = COLOR_SELECTED;
+    ctx.strokeStyle = '#3b82f6';
     ctx.lineWidth = 2;
     dots.forEach(d => {
         ctx.beginPath();
@@ -478,10 +461,6 @@ export function buildExecutionOrder(starterId, elements) {
     elements.forEach(el => {
         if (isNodeType(el.type)) nodeById.set(el.id, el);
     });
-    // Only arrows participate in trace execution — lines are visual only,
-    // by design. (If you ever want lines to also act as directed traversal
-    // edges, change the type check below; the rest of the trace logic
-    // doesn't care which it is.)
     elements.forEach(el => {
         if (el.type === 'arrow' && el.fromId && el.toId) {
             if (!outgoing.has(el.fromId)) outgoing.set(el.fromId, []);

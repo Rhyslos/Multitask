@@ -2,9 +2,15 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 
 // user functions
-export function useDragDrop({ tasks, lists, onReorderTasks, onReorderLists, onGhostDrop }) {
+//
+// Drag-and-drop hook for tasks and lists.
+//
+// Accepts `columns` so colIndex/columnID lookups can be done against React
+// state rather than the DOM — the old version parsed `--col` off an inline
+// style, which silently returned 0 if the DOM shape ever changed.
+export function useDragDrop({ tasks, lists, columns, onReorderTasks, onReorderLists, onGhostDrop }) {
     const [dragging, setDragging] = useState(null);
-    const [dragType, setDragType] = useState(null); 
+    const [dragType, setDragType] = useState(null);
     const [cloneMeta, setCloneMeta] = useState(null);
     const [insertionPoint, setInsertionPoint] = useState(null);
 
@@ -15,6 +21,7 @@ export function useDragDrop({ tasks, lists, onReorderTasks, onReorderLists, onGh
     const draggingRef = useRef(null);
     const tasksRef = useRef(tasks);
     const listsRef = useRef(lists || []);
+    const columnsRef = useRef(columns || []);
     const lastPos = useRef({ x: 0, y: 0 });
     const cloneOuterRef = useRef(null);
     const cloneInnerRef = useRef(null);
@@ -26,13 +33,14 @@ export function useDragDrop({ tasks, lists, onReorderTasks, onReorderLists, onGh
     const onGhostDropRef = useRef(onGhostDrop);
     const onReorderTasksRef = useRef(onReorderTasks);
     const onReorderListsRef = useRef(onReorderLists);
-    
+
     // event functions
     useEffect(() => { onGhostDropRef.current = onGhostDrop; }, [onGhostDrop]);
     useEffect(() => { onReorderTasksRef.current = onReorderTasks; }, [onReorderTasks]);
     useEffect(() => { onReorderListsRef.current = onReorderLists; }, [onReorderLists]);
     useEffect(() => { tasksRef.current = tasks; }, [tasks]);
     useEffect(() => { if (lists) listsRef.current = lists; }, [lists]);
+    useEffect(() => { if (columns) columnsRef.current = columns; }, [columns]);
 
     function registerList(listId, el) {
         if (el) listRefs.current[listId] = el;
@@ -76,10 +84,10 @@ export function useDragDrop({ tasks, lists, onReorderTasks, onReorderLists, onGh
         });
 
         // Evaluate drop location dynamically based on payload type
-        const point = draggingRef.current.type === 'list' 
+        const point = draggingRef.current.type === 'list'
             ? getListInsertionPoint(e.clientX, e.clientY, draggingRef.current.item.id)
             : getTaskInsertionPoint(e.clientX, e.clientY, draggingRef.current.item.id);
-        
+
         setInsertionPoint(prev => {
             if (!prev && !point) return prev;
             if (prev && point && prev.type === point.type) {
@@ -179,6 +187,9 @@ export function useDragDrop({ tasks, lists, onReorderTasks, onReorderLists, onGh
 
         if (!targetListId) return null;
 
+        // We only return targetListId and the cursor's insertion index here.
+        // The actual sibling array is recomputed at commit time from tasksRef
+        // — see commitTaskReorder for why (stale-snapshot defence).
         const listTasks = tasksRef.current
             .filter(t => t.listID === targetListId && t.id !== draggedId)
             .sort((a, b) => a.taskOrder - b.taskOrder);
@@ -196,17 +207,17 @@ export function useDragDrop({ tasks, lists, onReorderTasks, onReorderLists, onGh
             }
         }
 
-        return { type: 'task', listId: targetListId, insertIndex, listTasks };
+        return { type: 'task', listId: targetListId, insertIndex };
     }
 
     function getListInsertionPoint(cx, cy, draggedId) {
         let targetColumnId = null;
-        let candidateLists = [];
 
-        // 1. Identify which column zone is active by measuring against existing list containers
+        // 1. Identify which column zone is active by measuring against existing list containers.
+        //    A ±30px slop on x is intentional — it gives the user some forgiveness when dropping
+        //    near the gap between columns.
         for (const [listId, el] of Object.entries(listRefs.current)) {
             const rect = el.getBoundingClientRect();
-            // Generous horizontal padding evaluates drops easily into neighboring column layouts
             if (cx >= rect.left - 30 && cx <= rect.right + 30) {
                 const matchedList = listsRef.current.find(l => l.id === listId);
                 if (matchedList) {
@@ -216,21 +227,17 @@ export function useDragDrop({ tasks, lists, onReorderTasks, onReorderLists, onGh
             }
         }
 
-        // 2. If dropped outside cached vertical zones, find the closest active column contextually
-        if (!targetColumnId && listsRef.current.length > 0) {
-            targetColumnId = listsRef.current[0].columnID;
-        }
-
+        // If no target column is found, return null to trigger a ghost drop.
         if (!targetColumnId) return null;
 
-        // 3. Filter sibling lists mapped to the targeted column container
-        candidateLists = listsRef.current
+        // 2. Filter sibling lists mapped to the targeted column container
+        const candidateLists = listsRef.current
             .filter(l => l.columnID === targetColumnId && l.id !== draggedId)
             .sort((a, b) => (a.listOrder ?? 0) - (b.listOrder ?? 0));
 
         let insertIndex = candidateLists.length;
 
-        // 4. Reuse standard midpoint split evaluations to support dragging lists Up/Down smoothly
+        // 3. Standard midpoint split evaluation
         for (let i = 0; i < candidateLists.length; i++) {
             const el = listRefs.current[candidateLists[i].id];
             if (!el) continue;
@@ -242,18 +249,30 @@ export function useDragDrop({ tasks, lists, onReorderTasks, onReorderLists, onGh
             }
         }
 
-        // Resolve active column index matching for accurate view layer indicators
-        const referenceList = listsRef.current.find(l => l.columnID === targetColumnId);
-        const colIndex = referenceList ? referenceList.columnIndex ?? 0 : 0;
+        // 4. Read colIndex from React state via columnsRef — never from DOM.
+        //    The previous version parsed `--col` off an inline style, which would
+        //    silently return 0 if the class/style ever moved, breaking the insertion
+        //    indicator highlight in KanbanColumn.
+        const targetColumn = columnsRef.current.find(c => c.id === targetColumnId);
+        const colIndex = targetColumn?.columnIndex ?? 0;
 
-        return { type: 'list', columnId: targetColumnId, colIndex, insertIndex, candidateLists };
+        return { type: 'list', columnId: targetColumnId, colIndex, insertIndex };
     }
 
     function commitTaskReorder(task, point) {
-        const { listId, insertIndex, listTasks } = point;
+        const { listId, insertIndex } = point;
 
+        // Recompute siblings from the CURRENT tasksRef rather than using the snapshot
+        // taken when the cursor last moved — that snapshot can be stale if a server
+        // merge landed mid-drag, which would cause the commit to overwrite remote
+        // changes with old positions.
+        const listTasks = tasksRef.current
+            .filter(t => t.listID === listId && t.id !== task.id)
+            .sort((a, b) => a.taskOrder - b.taskOrder);
+
+        const clampedIndex = Math.min(Math.max(insertIndex, 0), listTasks.length);
         const newOrder = [...listTasks];
-        newOrder.splice(insertIndex, 0, task);
+        newOrder.splice(clampedIndex, 0, task);
 
         const updates = newOrder
             .map((t, i) => ({ id: t.id, listID: listId, taskOrder: i }))
@@ -262,16 +281,22 @@ export function useDragDrop({ tasks, lists, onReorderTasks, onReorderLists, onGh
                 return !original || original.listID !== u.listID || original.taskOrder !== u.taskOrder;
             });
 
-        onReorderTasksRef.current?.(updates);
+        if (updates.length > 0) onReorderTasksRef.current?.(updates);
     }
 
     function commitListReorder(list, point) {
-        const { columnId, insertIndex, candidateLists } = point;
+        const { columnId, insertIndex } = point;
 
+        // Same stale-snapshot defence as commitTaskReorder — recompute siblings
+        // from listsRef so we don't fight server merges that landed mid-drag.
+        const candidateLists = listsRef.current
+            .filter(l => l.columnID === columnId && l.id !== list.id)
+            .sort((a, b) => (a.listOrder ?? 0) - (b.listOrder ?? 0));
+
+        const clampedIndex = Math.min(Math.max(insertIndex, 0), candidateLists.length);
         const newOrder = [...candidateLists];
-        newOrder.splice(insertIndex, 0, list);
+        newOrder.splice(clampedIndex, 0, list);
 
-        // Map column assignments and continuous ordering sequences back to the SQLite data pool
         const updates = newOrder
             .map((l, i) => ({ id: l.id, columnID: columnId, listOrder: i }))
             .filter(u => {
@@ -279,7 +304,7 @@ export function useDragDrop({ tasks, lists, onReorderTasks, onReorderLists, onGh
                 return !original || original.columnID !== u.columnID || original.listOrder !== u.listOrder;
             });
 
-        onReorderListsRef.current?.(updates);
+        if (updates.length > 0) onReorderListsRef.current?.(updates);
     }
 
     return {

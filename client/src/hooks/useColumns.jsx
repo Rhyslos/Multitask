@@ -2,6 +2,20 @@ import { useState, useEffect, useCallback } from 'react';
 import { useSync } from './useSync';
 import { SyncManager } from '../sync/syncManager';
 
+// Cheap structural-equality check for an array of rows: same length, and every
+// row matches by id + updatedAt. Server merges only land via the upsert path
+// (which bumps updatedAt), so this is sufficient to detect real change.
+// Cheaper and more correct than JSON.stringify, which is O(n) on every fire
+// and not guaranteed to be order-stable across object key orderings.
+function rowsEqualByIdAndUpdatedAt(a, b) {
+    if (a === b) return true;
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+        if (a[i].id !== b[i].id || a[i].updatedAt !== b[i].updatedAt) return false;
+    }
+    return true;
+}
+
 // Fetches and manages kanban columns for a given tab.
 // A column is a stable entity with a UUID — columnIndex is only used for
 // display ordering and is never used as a React key or identifier.
@@ -14,13 +28,13 @@ export function useColumns(workspaceID, tabID) {
         if (!sm || !workspaceID || !tabID) return;
 
         const rows = await sm.query(
-            `SELECT * FROM kanban_columns 
-             WHERE workspaceID = ? AND tabID = ? AND isDeleted = 0 
+            `SELECT * FROM kanban_columns
+             WHERE workspaceID = ? AND tabID = ? AND isDeleted = 0
              ORDER BY columnIndex ASC`,
             [workspaceID, tabID]
         );
 
-        setColumns(prev => JSON.stringify(prev) === JSON.stringify(rows) ? prev : rows);
+        setColumns(prev => rowsEqualByIdAndUpdatedAt(prev, rows) ? prev : rows);
         setLoading(false);
     }, [sm, workspaceID, tabID]);
 

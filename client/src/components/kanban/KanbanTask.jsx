@@ -19,19 +19,22 @@ export default function KanbanTask({
     const taskRef = useRef(null);
 
     // lifecycle functions
+    //
+    // One effect, two registries. The drag-drop hook (registerTask) and the
+    // FLIP animation hook (registerElement) both want a handle to the same DOM
+    // node — registering the same ref to both in one place keeps the lifecycles
+    // synchronised and makes it obvious they refer to the same element.
+    // Clones aren't registered with the animation system since they're transient.
     useEffect(() => {
-        if (registerTask) {
-            registerTask(task.id, taskRef.current);
-            return () => registerTask(task.id, null);
-        }
-    }, [task.id, registerTask]);
+        const el = taskRef.current;
+        if (registerTask) registerTask(task.id, el);
+        if (registerElement && !isClone) registerElement(task.id, el);
 
-    useEffect(() => {
-        if (registerElement && !isClone) {
-            registerElement(task.id, taskRef.current);
-            return () => registerElement(task.id, null);
-        }
-    }, [task.id, registerElement, isClone]);
+        return () => {
+            if (registerTask) registerTask(task.id, null);
+            if (registerElement && !isClone) registerElement(task.id, null);
+        };
+    }, [task.id, registerTask, registerElement, isClone]);
 
     // state variables
     const categoryData = categories.find(c => c.name === task.originalCategory);
@@ -48,8 +51,8 @@ export default function KanbanTask({
             e.target.closest('.cat-dropdown') ||
             e.target.closest('.kanban-task-drag-handle')
         ) return;
-        
-        onOpen(task); 
+
+        onOpen(task);
     }
 
     function handleTitleBlur() {
@@ -64,7 +67,6 @@ export default function KanbanTask({
         }
     }
 
-    // TODO: Bytte onMouseDown med onDrag?
     return (
         <div
             ref={taskRef}
@@ -74,7 +76,7 @@ export default function KanbanTask({
             <div className="kanban-task-banner" style={{ background: activeBannerColor }} />
 
             <div className="kanban-task-body" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                
+
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
                     <input
                         type="checkbox"
@@ -83,7 +85,7 @@ export default function KanbanTask({
                         onChange={e => onUpdate({ isCompleted: e.target.checked })}
                         style={{ marginTop: '3px', flexShrink: 0 }}
                     />
-                    
+
                     <span
                         ref={titleRef}
                         className="kanban-task-title"
@@ -93,16 +95,14 @@ export default function KanbanTask({
                         onKeyDown={handleTitleKeyDown}
                         onMouseDown={e => {
                             e.stopPropagation();
-                            setTimeout(() => titleRef.current?.focus(), 0); 
+                            setTimeout(() => titleRef.current?.focus(), 0);
                         }}
                         style={{ flex: 1, minWidth: 0, wordBreak: 'break-word', outline: 'none' }}
                     >
                         {task.title}
                     </span>
 
-
-                    
-                    <div 
+                    <div
                         className="kanban-task-drag-handle"
                         onMouseDown={e => onStartDrag(e, task, taskRef.current)}
                         style={{ cursor: 'grab', color: '#aaa', padding: '0 4px', fontSize: '14px', userSelect: 'none', flexShrink: 0 }}

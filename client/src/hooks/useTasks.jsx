@@ -1,6 +1,18 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSync } from './useSync';
 import { SyncManager } from '../sync/syncManager';
+
+// Cheap structural-equality check (see useColumns for rationale).
+// updatedAt covers any field change including subtasks, since the writer always
+// bumps it on update.
+function rowsEqualByIdAndUpdatedAt(a, b) {
+    if (a === b) return true;
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+        if (a[i].id !== b[i].id || a[i].updatedAt !== b[i].updatedAt) return false;
+    }
+    return true;
+}
 
 // Fetches and manages tasks for a given set of list IDs.
 // Receives listIDs as an array — one subscription covers all lists in the tab,
@@ -10,32 +22,43 @@ export function useTasks(listIDs) {
     const [tasks, setTasks] = useState([]);
     const [loading, setLoading] = useState(true);
 
-    // Stable serialized key so useCallback doesn't change on every render
-    const listIDsKey = JSON.stringify(listIDs);
+    // Stable serialized key so loadLocal's identity doesn't change just because
+    // the parent passed a new array reference with the same IDs.
+    const listIDsKey = useMemo(
+        () => (listIDs ?? []).join(','),
+        [listIDs]
+    );
 
     // query functions
     const loadLocal = useCallback(async () => {
-        if (!sm || !listIDs || listIDs.length === 0) {
+        if (!sm || !listIDsKey) {
             setTasks([]);
             setLoading(false);
             return;
         }
 
-        const placeholders = listIDs.map(() => '?').join(',');
+        const ids = listIDsKey.split(',').filter(Boolean);
+        if (ids.length === 0) {
+            setTasks([]);
+            setLoading(false);
+            return;
+        }
+
+        const placeholders = ids.map(() => '?').join(',');
         const rows = await sm.query(
-            `SELECT * FROM tasks 
-            WHERE listID IN (${placeholders}) AND isDeleted = 0 
+            `SELECT * FROM tasks
+            WHERE listID IN (${placeholders}) AND isDeleted = 0
             ORDER BY taskOrder ASC`,
-            listIDs
+            ids
         );
 
-    // parsing functions
+        // parsing functions
         const parsedRows = rows.map(row => ({
             ...row,
             subtasks: row.subtasks ? JSON.parse(row.subtasks) : []
         }));
 
-        setTasks(prev => JSON.stringify(prev) === JSON.stringify(parsedRows) ? prev : parsedRows);
+        setTasks(prev => rowsEqualByIdAndUpdatedAt(prev, parsedRows) ? prev : parsedRows);
         setLoading(false);
     }, [sm, listIDsKey]);
 
@@ -54,7 +77,7 @@ export function useTasks(listIDs) {
         const id = crypto.randomUUID();
 
         await sm.execute(
-            `INSERT INTO tasks (id, title, description, isCompleted, originalCategory, color, listID, taskOrder, deadline, subtasks, updatedAt) 
+            `INSERT INTO tasks (id, title, description, isCompleted, originalCategory, color, listID, taskOrder, deadline, subtasks, updatedAt)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [id, 'New Task', '', 0, listCategory ?? '', listColor ?? '', listID, existingTasks.length, null, null, SyncManager.nowIso()]
         );
@@ -73,8 +96,8 @@ export function useTasks(listIDs) {
         const subtasksString = updated.subtasks ? JSON.stringify(updated.subtasks) : null;
 
         await sm.execute(
-            `UPDATE tasks SET 
-                title = ?, description = ?, isCompleted = ?, 
+            `UPDATE tasks SET
+                title = ?, description = ?, isCompleted = ?,
                 listID = ?, originalCategory = ?, color = ?, taskOrder = ?,
                 deadline = ?, subtasks = ?,
                 updatedAt = ?

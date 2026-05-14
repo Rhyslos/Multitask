@@ -6,7 +6,7 @@ export default function KanbanTabs({ tabs, activeTabId, onSelect, onAdd, onUpdat
     const [editingId, setEditingId] = useState(null);
     const [editingColor, setEditingColor] = useState(null);
     const [pickerPos, setPickerPos] = useState({ top: 0, left: 0 });
-    
+
     const nameRefs = useRef({});
     const colorBtnRefs = useRef({});
 
@@ -62,7 +62,12 @@ export default function KanbanTabs({ tabs, activeTabId, onSelect, onAdd, onUpdat
             setEditingColor(null);
             return;
         }
-        const rect = colorBtnRefs.current[tab.id].getBoundingClientRect();
+        // Null-guard: the ref can be missing if the tab was removed between
+        // render and click (unlikely but cheap to defend).
+        const btn = colorBtnRefs.current[tab.id];
+        if (!btn) return;
+
+        const rect = btn.getBoundingClientRect();
         setPickerPos({
             top: rect.bottom + 8,
             left: rect.left,
@@ -77,13 +82,13 @@ export default function KanbanTabs({ tabs, activeTabId, onSelect, onAdd, onUpdat
 
     useEffect(() => {
         if (!editingColor) return;
-        
+
         function handleClose() { setEditingColor(null); }
-        
+
         document.addEventListener('mousedown', handleClose);
-        window.addEventListener('scroll', handleClose, true); 
+        window.addEventListener('scroll', handleClose, true);
         window.addEventListener('resize', handleClose);
-        
+
         return () => {
             document.removeEventListener('mousedown', handleClose);
             window.removeEventListener('scroll', handleClose, true);

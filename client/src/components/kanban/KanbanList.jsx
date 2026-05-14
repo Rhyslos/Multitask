@@ -10,14 +10,14 @@ export default function KanbanList({
     isFocused,
     dragging,
     insertionPoint,
-    isDraggingList, 
+    isDraggingList,
     onUpdate,
     onDelete,
     onAddTask,
     onUpdateTask,
     onDeleteTask,
-    onStartTaskDrag, 
-    onStartListDrag, 
+    onStartTaskDrag,
+    onStartListDrag,
     onOpenTask,
     onFocusClear,
     registerList,
@@ -29,25 +29,36 @@ export default function KanbanList({
     const listRef = useRef(null);
 
     // event functions
+    //
+    // One effect registers the list's DOM node to both the drag-drop tracker
+    // and the FLIP animation system. Same rationale as KanbanTask: same node,
+    // both registries, one source of truth for lifecycle.
     useEffect(() => {
-        registerList(list.id, listRef.current);
-        return () => registerList(list.id, null);
-    }, [list.id, registerList]);
+        const el = listRef.current;
+        if (registerList) registerList(list.id, el);
+        if (registerListElement) registerListElement(list.id, el);
+
+        return () => {
+            if (registerList) registerList(list.id, null);
+            if (registerListElement) registerListElement(list.id, null);
+        };
+    }, [list.id, registerList, registerListElement]);
 
     useEffect(() => {
-        if (registerListElement) {
-            registerListElement(list.id, listRef.current);
-            return () => registerListElement(list.id, null);
-        }
-    }, [list.id, registerListElement]);
+        if (!isFocused) return;
 
-    useEffect(() => {
-        if (isFocused && nameRef.current) {
-            nameRef.current.focus();
-            const range = document.createRange();
-            range.selectNodeContents(nameRef.current);
-            window.getSelection().removeAllRanges();
-            window.getSelection().addRange(range);
+        // Guard against the node being detached during a parent re-render —
+        // selectNodeContents on a detached node throws.
+        const el = nameRef.current;
+        if (!el || !el.isConnected) return;
+
+        el.focus();
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        const sel = window.getSelection();
+        if (sel) {
+            sel.removeAllRanges();
+            sel.addRange(range);
         }
     }, [isFocused]);
 
@@ -67,18 +78,18 @@ export default function KanbanList({
     // data processing functions
     const categoryData = categories.find(c => c.name === list.category);
     const sortedTasks = [...tasks].sort((a, b) => a.taskOrder - b.taskOrder);
-    
-    const taskInsertionIndex = insertionPoint?.type === 'task' && insertionPoint.listId === list.id 
-        ? insertionPoint.insertIndex 
+
+    const taskInsertionIndex = insertionPoint?.type === 'task' && insertionPoint.listId === list.id
+        ? insertionPoint.insertIndex
         : null;
 
     return (
-        <div 
-            className={`kanban-list ${isDraggingList ? 'is-dragging-list' : ''}`} 
+        <div
+            className={`kanban-list ${isDraggingList ? 'is-dragging-list' : ''}`}
             ref={listRef}
         >
             <div className="kanban-list-header" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div 
+                <div
                     className="kanban-list-drag-handle"
                     onMouseDown={e => onStartListDrag(e, list, listRef.current)}
                     style={{ cursor: 'grab', color: '#aaa', padding: '0 2px', fontSize: '14px', userSelect: 'none' }}
@@ -93,7 +104,7 @@ export default function KanbanList({
                         style={{ background: categoryData.color, flexShrink: 0 }}
                     />
                 )}
-                
+
                 <span
                     ref={nameRef}
                     className="kanban-list-name"

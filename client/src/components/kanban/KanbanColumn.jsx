@@ -8,10 +8,10 @@ export default function KanbanColumn({
     tasksByListID,
     categories,
     focusedListId,
-    dragging, 
-    dragType, 
-    insertionPoint, 
-    isDraggingTaskToEmptyCol, 
+    dragging,
+    dragType,
+    insertionPoint,
+    isDraggingTaskToEmptyCol,
     onAddTask,
     onUpdateList,
     onDeleteList,
@@ -29,7 +29,7 @@ export default function KanbanColumn({
 }) {
     // data processing functions
     const sortedLists = [...lists].sort((a, b) => (a.listOrder ?? 0) - (b.listOrder ?? 0));
-    
+
     const listInsertionIndex = insertionPoint?.type === 'list' && insertionPoint.colIndex === column.columnIndex
         ? insertionPoint.insertIndex
         : null;
@@ -41,7 +41,7 @@ export default function KanbanColumn({
                     {listInsertionIndex === index && (
                         <div className="kanban-list-insertion-indicator" style={{ height: '4px', background: 'var(--accent)', margin: '4px 0', borderRadius: '2px' }} />
                     )}
-                    
+
                     <KanbanList
                         list={list}
                         tasks={tasksByListID[list.id] ?? []}
@@ -71,19 +71,26 @@ export default function KanbanColumn({
                 <div className="kanban-list-insertion-indicator" style={{ height: '4px', background: 'var(--accent)', margin: '4px 0', borderRadius: '2px' }} />
             )}
 
+            {/* Ghost zone for dropping a TASK into a column that has no lists.
+                Namespaced key ('ghost-task-col-') prevents collision with the
+                list-empty-column dropzone below. The onGhostDrop handler in
+                Kanban.jsx parses both prefixes. */}
             {isDraggingTaskToEmptyCol && (
                 <div
                     className="kanban-ghost-list"
-                    ref={el => registerGhost(`ghost-col-${column.columnIndex}`, el)}
+                    ref={el => registerGhost(`ghost-task-col-${column.columnIndex}`, el)}
                 >
                     <span>+ Drop to create list</span>
                 </div>
             )}
-            
+
+            {/* Ghost zone for dropping a LIST into a column with no other lists.
+                Distinct key from the task variant above. */}
             {dragType === 'list' && sortedLists.length === 0 && (
-                <div 
-                    className="kanban-empty-column-dropzone" 
-                    style={{ flex: 1, border: '2px dashed var(--border)', borderRadius: '8px', minHeight: '100px', opacity: 0.5 }} 
+                <div
+                    className="kanban-empty-column-dropzone"
+                    ref={el => registerGhost(`ghost-list-col-${column.columnIndex}`, el)}
+                    style={{ flex: 1, border: '2px dashed var(--border)', borderRadius: '8px', minHeight: '100px', opacity: 0.5 }}
                 />
             )}
         </div>

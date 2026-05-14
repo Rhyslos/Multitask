@@ -1,6 +1,16 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSync } from './useSync';
 import { SyncManager } from '../sync/syncManager';
+
+// Cheap structural-equality check (see useColumns for rationale).
+function rowsEqualByIdAndUpdatedAt(a, b) {
+    if (a === b) return true;
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+        if (a[i].id !== b[i].id || a[i].updatedAt !== b[i].updatedAt) return false;
+    }
+    return true;
+}
 
 // Fetches and manages lists for a given set of column IDs.
 // Receives columnIDs as an array so the parent (Kanban page) can pass all
@@ -10,23 +20,34 @@ export function useLists(columnIDs) {
     const [lists, setLists] = useState([]);
     const [loading, setLoading] = useState(true);
 
-    // Stable serialized key so useCallback doesn't change on every render
-    const columnIDsKey = JSON.stringify(columnIDs);
+    // Stable serialized key so loadLocal's identity doesn't change just because
+    // the parent passed a new array reference with the same IDs.
+    const columnIDsKey = useMemo(
+        () => (columnIDs ?? []).join(','),
+        [columnIDs]
+    );
 
     const loadLocal = useCallback(async () => {
-        if (!sm || !columnIDs || columnIDs.length === 0) {
+        if (!sm || !columnIDsKey) {
             setLists([]);
             setLoading(false);
             return;
         }
 
-        const placeholders = columnIDs.map(() => '?').join(',');
+        const ids = columnIDsKey.split(',').filter(Boolean);
+        if (ids.length === 0) {
+            setLists([]);
+            setLoading(false);
+            return;
+        }
+
+        const placeholders = ids.map(() => '?').join(',');
         const rows = await sm.query(
             `SELECT * FROM lists WHERE columnID IN (${placeholders}) AND isDeleted = 0`,
-            columnIDs
+            ids
         );
 
-        setLists(prev => JSON.stringify(prev) === JSON.stringify(rows) ? prev : rows);
+        setLists(prev => rowsEqualByIdAndUpdatedAt(prev, rows) ? prev : rows);
         setLoading(false);
     }, [sm, columnIDsKey]);
 
@@ -42,7 +63,7 @@ export function useLists(columnIDs) {
 
         const id = crypto.randomUUID();
         await sm.execute(
-            `INSERT INTO lists (id, name, category, color, direction, columnID, workspaceID, tabID, updatedAt) 
+            `INSERT INTO lists (id, name, category, color, direction, columnID, workspaceID, tabID, updatedAt)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [id, 'New List', '', '', 'vertical', columnID, workspaceID, tabID, SyncManager.nowIso()]
         );
@@ -83,5 +104,21 @@ export function useLists(columnIDs) {
         ]);
     }
 
-    return { lists, loading, addList, updateList, deleteList };
+    // Updates the column mapping and listOrder for multiple lists at once.
+    async function reorderLists(updates) {
+        if (!sm || !updates || updates.length === 0) return;
+
+        const ts = SyncManager.nowIso();
+
+        // Map the drag-and-drop updates into an array of SQL transactions
+        const batchStatements = updates.map(u => ({
+            sql: 'UPDATE lists SET columnID = ?, listOrder = ?, updatedAt = ? WHERE id = ?',
+            params: [u.columnID, u.listOrder, ts, u.id],
+        }));
+
+        // Execute them all at once so the UI stays snappy and in sync
+        await sm.runBatch(batchStatements);
+    }
+
+    return { lists, loading, addList, updateList, deleteList, reorderLists };
 }

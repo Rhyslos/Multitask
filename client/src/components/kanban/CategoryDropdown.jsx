@@ -10,8 +10,12 @@ export default function CategoryDropdown({ categories, selected, onSelect, onClo
         function handleClickOutside(e) {
             if (ref.current && !ref.current.contains(e.target)) onClose();
         }
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
+        // Using `click` rather than `mousedown` so that an item click inside
+        // the dropdown fires its onClick handler BEFORE this outside-click
+        // listener can close the menu. On `mousedown` the order was racy
+        // and could swallow the selection in some browsers.
+        document.addEventListener('click', handleClickOutside);
+        return () => document.removeEventListener('click', handleClickOutside);
     }, [onClose]);
 
     const filtered = categories.filter(c =>

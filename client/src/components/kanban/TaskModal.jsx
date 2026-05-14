@@ -1,5 +1,5 @@
 // user functions
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { createPortal } from 'react-dom';
 
 export default function TaskModal({ task, categories = [], onSave, onClose }) {
@@ -9,7 +9,7 @@ export default function TaskModal({ task, categories = [], onSave, onClose }) {
     const [category, setCategory] = useState(task?.originalCategory || '');
     const [color, setColor] = useState(task?.color || '#ffffff');
     const [deadline, setDeadline] = useState(task?.deadline || '');
-    
+
     // Internal Checkboxes (Subtasks)
     const [subtasks, setSubtasks] = useState(task?.subtasks || []);
 
@@ -17,11 +17,19 @@ export default function TaskModal({ task, categories = [], onSave, onClose }) {
         setSubtasks([...subtasks, { id: crypto.randomUUID(), text: '', done: false }]);
     }
 
+    // Immutable subtask update — replace the item at index with a fresh object
+    // rather than cloning the array and mutating the same row. The old version
+    // (`next[i].done = ...`) mutated the original subtask object held in `task`,
+    // which would leak changes back to anything else holding that reference.
+    function updateSubtaskAt(index, patch) {
+        setSubtasks(prev => prev.map((st, i) => i === index ? { ...st, ...patch } : st));
+    }
+
     function handleSave() {
-        onSave({ 
-            title, 
-            description, 
-            isCompleted, 
+        onSave({
+            title,
+            description,
+            isCompleted,
             originalCategory: category,
             color,
             deadline,
@@ -32,7 +40,7 @@ export default function TaskModal({ task, categories = [], onSave, onClose }) {
     if (!task) return null;
 
     return createPortal(
-        <div 
+        <div
             onClick={onClose}
             style={{
                 position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
@@ -40,7 +48,7 @@ export default function TaskModal({ task, categories = [], onSave, onClose }) {
                 justifyContent: 'center', alignItems: 'center', zIndex: 99999, backdropFilter: 'blur(2px)'
             }}
         >
-            <div 
+            <div
                 onClick={e => e.stopPropagation()}
                 style={{
                     backgroundColor: 'var(--panel, #ffffff)', width: '500px', maxWidth: '90vw',
@@ -61,19 +69,19 @@ export default function TaskModal({ task, categories = [], onSave, onClose }) {
                 <div style={{ display: 'flex', gap: '10px' }}>
                     <div className="kanban-modal-group" style={{ flex: 1 }}>
                         <label>Deadline</label>
-                        <input 
-                            type="date" 
-                            className="kanban-modal-select" 
-                            value={deadline} 
-                            onChange={e => setDeadline(e.target.value)} 
+                        <input
+                            type="date"
+                            className="kanban-modal-select"
+                            value={deadline}
+                            onChange={e => setDeadline(e.target.value)}
                         />
                     </div>
                     <div className="kanban-modal-group">
                         <label>Task Color</label>
-                        <input 
-                            type="color" 
-                            value={color} 
-                            onChange={e => setColor(e.target.value)} 
+                        <input
+                            type="color"
+                            value={color}
+                            onChange={e => setColor(e.target.value)}
                             style={{ height: '38px', width: '60px', border: 'none', background: 'none' }}
                         />
                     </div>
@@ -89,30 +97,22 @@ export default function TaskModal({ task, categories = [], onSave, onClose }) {
 
                 <div className="kanban-modal-group">
                     <label style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        Checkboxes 
+                        Checkboxes
                         <button onClick={addSubtask} style={{ fontSize: '12px', cursor: 'pointer' }}>+ Add</button>
                     </label>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                         {subtasks.map((st, i) => (
                             <div key={st.id} style={{ display: 'flex', gap: '8px' }}>
-                                <input 
-                                    type="checkbox" 
-                                    checked={st.done} 
-                                    onChange={e => {
-                                        const next = [...subtasks];
-                                        next[i].done = e.target.checked;
-                                        setSubtasks(next);
-                                    }} 
+                                <input
+                                    type="checkbox"
+                                    checked={st.done}
+                                    onChange={e => updateSubtaskAt(i, { done: e.target.checked })}
                                 />
-                                <input 
-                                    type="text" 
-                                    value={st.text} 
+                                <input
+                                    type="text"
+                                    value={st.text}
                                     style={{ flex: 1, border: 'none', background: 'var(--accent-lt)' }}
-                                    onChange={e => {
-                                        const next = [...subtasks];
-                                        next[i].text = e.target.value;
-                                        setSubtasks(next);
-                                    }}
+                                    onChange={e => updateSubtaskAt(i, { text: e.target.value })}
                                 />
                             </div>
                         ))}

@@ -1,11 +1,23 @@
 // user functions
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import TabContextMenu from './TabContextMenu';
+import ConfirmModal from './ConfirmModal';
 
-export default function KanbanTabs({ tabs, activeTabId, onSelect, onAdd, onUpdate, onArchive }) {
+export default function KanbanTabs({ tabs, activeTabId, onSelect, onAdd, onUpdate, onArchive, onDelete }) {
     const [editingId, setEditingId] = useState(null);
     const [editingColor, setEditingColor] = useState(null);
     const [pickerPos, setPickerPos] = useState({ top: 0, left: 0 });
+
+    // Right-click menu state. `menuTab` is the tab the menu refers to;
+    // `menuPos` is where it should render. Both null when closed.
+    const [menuTab, setMenuTab] = useState(null);
+    const [menuPos, setMenuPos] = useState({ x: 0, y: 0 });
+
+    // Pending-confirmation tab. Separate from menuTab because the menu
+    // closes the moment Delete is clicked — the confirm modal lives on
+    // independently until the user resolves it.
+    const [confirmTab, setConfirmTab] = useState(null);
 
     const nameRefs = useRef({});
     const colorBtnRefs = useRef({});
@@ -80,6 +92,31 @@ export default function KanbanTabs({ tabs, activeTabId, onSelect, onAdd, onUpdat
         setEditingColor(null);
     }
 
+    // Right-click handler. Suppresses the browser's native context menu,
+    // records the tab and the click position, and opens our menu via
+    // setMenuTab. If only one tab remains, we don't show the menu at all —
+    // the single available action (Delete) would always be unsafe, so we
+    // hide rather than render a disabled-only menu (which reads as broken).
+    function handleContextMenu(e, tab) {
+        e.preventDefault();
+        if (tabs.length <= 1) return;
+        setMenuTab(tab);
+        setMenuPos({ x: e.clientX, y: e.clientY });
+    }
+
+    function handleMenuDelete() {
+        // Move from menu state into confirm state in a single transition.
+        // The menu's own close handlers (mousedown outside, etc.) won't
+        // fire here because the click landed inside the menu.
+        setConfirmTab(menuTab);
+        setMenuTab(null);
+    }
+
+    function handleConfirmDelete() {
+        if (confirmTab) onDelete?.(confirmTab.id);
+        setConfirmTab(null);
+    }
+
     useEffect(() => {
         if (!editingColor) return;
 
@@ -117,6 +154,7 @@ export default function KanbanTabs({ tabs, activeTabId, onSelect, onAdd, onUpdat
                         className={`kanban-tab ${activeTabId === tab.id ? 'active' : ''}`}
                         onClick={() => { if (editingId !== tab.id) onSelect(tab.id); }}
                         onDoubleClick={() => startEditing(tab)}
+                        onContextMenu={e => handleContextMenu(e, tab)}
                         style={{ '--tab-color': tab.color }}
                     >
                         <span className="kanban-tab-dot" style={{ background: tab.color }} />
@@ -171,6 +209,28 @@ export default function KanbanTabs({ tabs, activeTabId, onSelect, onAdd, onUpdat
                 </div>,
                 document.body
             )}
+
+            <TabContextMenu
+                open={!!menuTab}
+                x={menuPos.x}
+                y={menuPos.y}
+                onDelete={handleMenuDelete}
+                onClose={() => setMenuTab(null)}
+            />
+
+            <ConfirmModal
+                open={!!confirmTab}
+                title="Delete tab?"
+                message={
+                    confirmTab
+                        ? `"${confirmTab.name}" and all its columns, lists, and tasks will be permanently deleted. This cannot be undone.`
+                        : ''
+                }
+                confirmLabel="Delete"
+                cancelLabel="Cancel"
+                onConfirm={handleConfirmDelete}
+                onCancel={() => setConfirmTab(null)}
+            />
         </div>
     );
 }

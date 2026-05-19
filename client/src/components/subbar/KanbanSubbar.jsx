@@ -2,7 +2,7 @@ import Subbar from './Subbar';
 import KanbanTabs from '../kanban/KanbanTabs';
 
 // Component
-export default function KanbanSubbar({ tabs, activeTabId, onTabSelect, onTabAdd, onTabUpdate, onTabArchive }) {
+export default function KanbanSubbar({ tabs, activeTabId, onTabSelect, onTabAdd, onTabUpdate, onTabArchive, onTabDelete }) {
     return (
         <Subbar className="subbar--kanban">
             <KanbanTabs
@@ -12,6 +12,7 @@ export default function KanbanSubbar({ tabs, activeTabId, onTabSelect, onTabAdd,
                 onAdd={onTabAdd}
                 onUpdate={onTabUpdate}
                 onArchive={onTabArchive}
+                onDelete={onTabDelete}
             />
         </Subbar>
     );

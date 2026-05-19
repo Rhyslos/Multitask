@@ -23,7 +23,7 @@ export default function Kanban() {
     const { user } = useAuth();
     const { categories } = useWorkspaces(user?.id);
 
-    const { tabs, activeTabId, setActiveTabId, addTab, updateTab, archiveTab } =
+    const { tabs, activeTabId, setActiveTabId, addTab, updateTab, archiveTab, deleteTab } =
         useTabs(workspaceID);
 
     // `sm` is used here only for atomic combined writes — see
@@ -321,6 +321,7 @@ export default function Kanban() {
                 onTabAdd={addTab}
                 onTabUpdate={updateTab}
                 onTabArchive={archiveTab}
+                onTabDelete={deleteTab}
             />
 
             <div className="kanban-topbar" ref={topbarRef}>

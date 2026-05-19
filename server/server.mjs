@@ -45,9 +45,6 @@ export class KanbanServer {
             console.log(`Backend server running on http://localhost:${this.port}`);
         });
 
-        // The Yjs WS endpoint shares the HTTP server. Room name = URL path =
-        // workspace ID. attachGraphSync handles persistence + workspace-member
-        // auth before delegating to y-websocket's setupWSConnection.
         const wss = new WebSocketServer({ server });
         await attachGraphSync(wss, this.db);
     }

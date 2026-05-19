@@ -1,4 +1,4 @@
-// import functions
+// imports
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
@@ -12,13 +12,7 @@ import useLocalOverrides, { applyOverrides } from '../hooks/useLocalOverrides';
 import useAwareness from '../hooks/useAwareness';
 import { makeGraphMutator } from '../components/graph/graphMutator';
 
-// component functions
-//
-// Selection model: `selectedIds` is the source of truth, a Set<string>. The
-// legacy `setSelectedId` API is preserved as a wrapper that accepts a single
-// id, an array of ids, or null — so the dozens of call sites that pass a
-// single id keep working without changes. The first id (if any) is what we
-// broadcast over awareness; peers still see one ring per peer for now.
+// page component
 export default function Graph() {
     const { workspaceID } = useParams();
     const { user } = useAuth();
@@ -38,19 +32,9 @@ export default function Graph() {
 
     const [clipboard, setClipboard] = useState(null);
 
-    // ── Selection ────────────────────────────────────────────────────
-    // Set is fine: typical selections are <100 elements, lookups are O(1),
-    // and we only replace the whole set on change (no in-place mutation).
+    // selection state
     const [selectedIds, setSelectedIdsRaw] = useState(() => new Set());
 
-    // Polymorphic setter. Accepts:
-    //   null          → clear
-    //   string        → single-select
-    //   string[]      → multi-select (replaces current)
-    //   Set<string>   → multi-select (replaces current)
-    //   (prev) => ... → functional update; receives the current Set
-    //
-    // Keeps the old `setSelectedId(id)` callers working unchanged.
     const setSelectedId = useMemo(() => (next) => {
         setSelectedIdsRaw(prev => {
             let nextSet;
@@ -60,22 +44,16 @@ export default function Graph() {
             } else {
                 nextSet = toSet(next);
             }
-            // Broadcast the first id (or null) — awareness still single-id
-            // for now. When peers learn to render multi-selection, this is
-            // the one place that changes.
+            
             const first = nextSet.size > 0 ? nextSet.values().next().value : null;
             broadcastSelection(first);
             return nextSet;
         });
     }, [broadcastSelection]);
 
-    // Convenience: the single "primary" id, used by code that still cares
-    // about one selection (resize handles, context menu target, set-as-starter).
-    // For multi-selection we expose the most-recently-added id, which matches
-    // user intent in most cases.
     const selectedId = useMemo(() => {
         if (selectedIds.size === 0) return null;
-        // Set iteration order = insertion order, so this is the last one added.
+        
         let last = null;
         for (const id of selectedIds) last = id;
         return last;
@@ -83,7 +61,7 @@ export default function Graph() {
 
     const [starterId, setStarterId] = useState(null);
 
-    // Trace state — unchanged.
+    // trace state
     const [isRunning, setIsRunning] = useState(false);
     const [speed, setSpeed] = useState(600);
     const [executionSteps, setExecutionSteps] = useState([]);
@@ -100,6 +78,7 @@ export default function Graph() {
         return set;
     }, [executionSteps, stepIndex]);
 
+    // effect handlers
     useEffect(() => {
         if (!isRunning) return;
         intervalRef.current = setInterval(() => {
@@ -116,6 +95,7 @@ export default function Graph() {
         return () => clearInterval(intervalRef.current);
     }, [isRunning, speed, executionSteps.length]);
 
+    // event handlers
     const handlePlay = () => {
         if (!starterId) {
             alert('Pick a node and click "Set as Starter" first.');
@@ -216,8 +196,7 @@ export default function Graph() {
     );
 }
 
-// Coerce the polymorphic input to a Set<string>. Centralized so the setter
-// stays small and the conversion rules are in one place.
+// utility functions
 function toSet(input) {
     if (input == null) return new Set();
     if (input instanceof Set) return new Set(input);

@@ -1,3 +1,4 @@
+// imports
 import { useEffect, useState, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { useEditor, EditorContent } from '@tiptap/react';
@@ -11,6 +12,7 @@ import { editorExtensions } from '../components/notation/EditorExtensions';
 import NotationSubbar from '../components/subbar/NotationSubbar';
 import NotationSidebar from '../components/notation/NotationSidebar';
 
+// page component
 export default function Notation() {
     const { workspaceID } = useParams();
     const { user } = useAuth();

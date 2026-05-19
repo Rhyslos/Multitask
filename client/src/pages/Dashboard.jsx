@@ -1,3 +1,4 @@
+// imports
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
@@ -9,8 +10,7 @@ import CreateWorkspaceModal from '../components/workspace/CreateWorkspaceModal';
 import WorkspaceSettingsModal from '../components/workspace/WorkspaceSettingsModal';
 import AnimatedRemoval from '../components/AnimatedRemoval';
 
-
-// Page
+// page component
 export default function Dashboard() {
     const { user } = useAuth();
     const navigate = useNavigate();

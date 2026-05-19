@@ -1,6 +1,7 @@
+// imports
 import { useState } from 'react';
 
-// component
+// page component
 export default function Settings({ initialSettings, onSave, onCancel }) {
     // state variables
     const [defaultTaskColor, setDefaultTaskColor] = useState(initialSettings?.defaultTaskColor || '#ffffff');

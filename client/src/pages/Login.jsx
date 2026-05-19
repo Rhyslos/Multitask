@@ -1,9 +1,10 @@
-// page component
+// imports
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { appName } from '../App';
 
+// page component
 export default function Login() {
     const { login } = useAuth();
     const navigate = useNavigate();

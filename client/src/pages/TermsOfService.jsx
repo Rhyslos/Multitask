@@ -1,6 +1,7 @@
-// page component
+// imports
 import { useNavigate } from 'react-router-dom';
 
+// page component
 export default function TermsOfService() {
     const navigate = useNavigate();
 

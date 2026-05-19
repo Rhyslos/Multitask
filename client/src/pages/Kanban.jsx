@@ -1,3 +1,4 @@
+// imports
 import { useState, useRef, useMemo } from "react";
 import { useParams } from "react-router-dom";
 import { useColumns } from "../hooks/useColumns";
@@ -17,7 +18,7 @@ import KanbanTask from "../components/kanban/KanbanTask";
 import TaskModal from "../components/kanban/TaskModal";
 import DeleteDropZone from "../components/kanban/DeleteDropZone";
 
-// Page
+// page component
 export default function Kanban() {
     const { workspaceID } = useParams();
     const { user } = useAuth();
@@ -26,23 +27,12 @@ export default function Kanban() {
     const { tabs, activeTabId, setActiveTabId, addTab, updateTab, archiveTab, deleteTab } =
         useTabs(workspaceID);
 
-    // `sm` is used here only for atomic combined writes — see
-    // reorderListsAndPruneAtomic below. Single-table mutations stay inside
-    // their respective hooks (useLists, useColumns, etc.).
     const { sm } = useSync();
 
-    // --- Data layer ---
-    // Note: `deleteList`, `reorderLists`, and `deleteColumn` are deliberately
-    // NOT destructured here. The atomic helpers below (reorderListsAndPruneAtomic,
-    // deleteListAndPruneAtomic) issue those SQL writes themselves via sm.runBatch
-    // so the list mutation and the column prune land in a single transaction.
+    // data layer
     const { columns, addColumn } =
         useColumns(workspaceID, activeTabId);
 
-    // Note: the previous `useMemo` with a `[columns.map(c => c.id).join(',')]`
-    // dependency was running the map+join on every render anyway — the memo
-    // only saved one extra `.map()`. Just compute inline; downstream hooks
-    // re-query on their own subscriptions.
     const columnIDs = columns.map(c => c.id);
     const { lists, addList, updateList } = useLists(columnIDs);
 
@@ -50,42 +40,18 @@ export default function Kanban() {
     const { tasks, addTask, updateTask, deleteTask, reorderTasks } =
         useTasks(listIDs);
 
-    // --- UI state ---
+    // ui state
     const [activeTask, setActiveTask] = useState(null);
     const [focusedListId, setFocusedListId] = useState(null);
 
     const topbarRef = useRef(null);
     const boardRef = useRef(null);
 
-    // --- Animations ---
+    // animations
     const { registerElement: registerTaskElement } = useFlipAnimation(tasks);
     const { registerElement: registerListElement } = useFlipAnimation(lists);
 
-    // ---------- Column auto-prune (action-scoped, atomic) ----------
-    //
-    // When a list moves away from a column OR a column's last list is deleted,
-    // the source column may end up empty. If that source column is the
-    // rightmost column on the board, auto-delete it — matching the
-    // long-standing "the rightmost column should never sit empty after you
-    // emptied it yourself" UX.
-    //
-    // Rules:
-    //   - ACTION-SCOPED: only columns that were the source of the current
-    //     action are candidates. Columns emptied by other peers (via sync) or
-    //     left empty by earlier user actions are untouched. This avoids a
-    //     race where Bob adds an empty column and Alice's next drag eats it.
-    //   - RIGHTMOST-ONLY: a source column is only deleted if its columnIndex
-    //     equals max(columns.columnIndex). No mid-board deletions.
-    //   - NO INTRA-ACTION CASCADE: at most one column is deleted per action.
-    //     Successive user actions still cascade naturally over time.
-    //
-    // The reorder writes and the column soft-delete are dispatched in a
-    // single sm.runBatch — one worker transaction, one _notify, no flicker
-    // window where the moved list is in its new column but the old empty
-    // column is still rendered.
-
-    // Given the predicted post-action lists and the set of source columns
-    // touched by the action, return the column to delete (or null).
+    // atomic operations
     function pickColumnToPrune(sourceColumnIDs, predictedLists) {
         if (columns.length === 0 || sourceColumnIDs.size === 0) return null;
 
@@ -101,20 +67,15 @@ export default function Kanban() {
         return null;
     }
 
-    // Atomic: list reorder + optional column delete in one batch.
-    // `updates` is the same shape as useLists.reorderLists takes.
     async function reorderListsAndPruneAtomic(updates) {
         if (!sm || !updates || updates.length === 0) return;
 
-        // 1. Compute predicted post-action lists.
         const updateMap = new Map(updates.map(u => [u.id, u]));
         const predicted = lists.map(l => {
             const u = updateMap.get(l.id);
             return u ? { ...l, columnID: u.columnID, listOrder: u.listOrder } : l;
         });
 
-        // 2. The source columns are those the moved lists came FROM —
-        //    i.e. their pre-action columnID, not the new one.
         const sourceColumnIDs = new Set();
         for (const u of updates) {
             const before = lists.find(l => l.id === u.id);
@@ -123,10 +84,8 @@ export default function Kanban() {
             }
         }
 
-        // 3. Pick a single column to prune under the action-scoped rules.
         const colToDelete = pickColumnToPrune(sourceColumnIDs, predicted);
 
-        // 4. Build one batch.
         const ts = SyncManager.nowIso();
         const statements = updates.map(u => ({
             sql: 'UPDATE lists SET columnID = ?, listOrder = ?, updatedAt = ? WHERE id = ?',
@@ -142,8 +101,6 @@ export default function Kanban() {
         await sm.runBatch(statements);
     }
 
-    // Atomic variant for the delete-last-list case. The list-delete cascade
-    // (list + its tasks) and the optional column prune go in one batch.
     async function deleteListAndPruneAtomic(listID) {
         if (!sm) return;
         const list = lists.find(l => l.id === listID);
@@ -178,24 +135,13 @@ export default function Kanban() {
         await deleteListAndPruneAtomic(listID);
     }
 
-    // ---------- Drag-to-delete animation wiring ----------
-    //
-    // useAnimatedRemoval fades the node, THEN fires the mutation. Two separate
-    // instances so tasks and lists each track their own removingIds set —
-    // mixing them would mean a list-delete could un-fade a task that happened
-    // to share an id prefix (vanishingly unlikely, but the cost of separating
-    // is one extra hook).
-    //
-    // For lists we route through handleDeleteList, not deleteList directly,
-    // so the atomic column-prune still runs after the fade completes.
+    // animated removal
     const { triggerRemoval: triggerTaskRemoval, isRemoving: isTaskRemoving } =
         useAnimatedRemoval(deleteTask);
     const { triggerRemoval: triggerListRemoval, isRemoving: isListRemoving } =
         useAnimatedRemoval(handleDeleteList);
 
-    // --- Drag and drop ---
-    // `columns` is passed in so useDragDrop can resolve columnIndex from state
-    // rather than parsing inline CSS variables off the DOM.
+    // drag and drop handlers
     const {
         dragging,
         dragType,
@@ -214,20 +160,12 @@ export default function Kanban() {
         lists,
         columns,
         onReorderTasks: reorderTasks,
-        // List reorders go through the atomic prune wrapper so the source
-        // column (if it was the rightmost and is now empty) is auto-cleaned
-        // in the same batch — no flicker.
         onReorderLists: reorderListsAndPruneAtomic,
         onDeleteDrop: (item, type) => {
-            // Fade first, then mutate. useAnimatedRemoval delays the actual
-            // delete call by `duration` ms; during the fade the node is still
-            // in the DOM but at opacity 0 and pointer-events: none.
             if (type === 'task') triggerTaskRemoval(item.id);
             else if (type === 'list') triggerListRemoval(item.id);
         },
         onGhostDrop: async (key, item) => {
-            // If dragging a list container directly onto a ghost column marker,
-            // avoid standard task mappings.
             const isListDrop = item?.columnID !== undefined;
             const isNewColumn = key === "new-column";
 
@@ -237,14 +175,11 @@ export default function Kanban() {
                 columnID = await addColumn(columns.length);
                 if (!columnID) return;
             } else {
-                // Ghost keys are namespaced by drag type to avoid collisions
-                // between the task and list empty-column dropzones in
-                // KanbanColumn — see the registerGhost calls there.
                 const indexFromKey = key.startsWith("ghost-task-col-")
                     ? parseInt(key.replace("ghost-task-col-", ""))
                     : key.startsWith("ghost-list-col-")
                     ? parseInt(key.replace("ghost-list-col-", ""))
-                    : parseInt(key.replace("ghost-col-", "")); // legacy fallback
+                    : parseInt(key.replace("ghost-col-", "")); 
 
                 const existingColumn = columns.find(c => c.columnIndex === indexFromKey);
                 columnID = existingColumn?.id;
@@ -252,13 +187,10 @@ export default function Kanban() {
             }
 
             if (isListDrop) {
-                // Route dragged list directly to the generated target column,
-                // then prune the source column if it was rightmost and emptied.
                 reorderListsAndPruneAtomic([{ id: item.id, columnID, listOrder: 0 }]);
                 return;
             }
 
-            // Standard fallback logic handles dropped tasks spawning intermediate lists
             const listID = await addList(columnID, workspaceID, activeTabId);
             if (!listID) return;
 
@@ -270,7 +202,7 @@ export default function Kanban() {
     const draggingTask = dragType === 'task' ? tasks.find(t => t.id === dragging) : null;
     const draggingList = dragType === 'list' ? lists.find(l => l.id === dragging) : null;
 
-    // --- Layout ---
+    // layout functions
     const columnCount = columns.length;
     const plusButtonCount = columnCount + 1;
     const boardInnerWidth = columnCount * (300 + 16) + 24 + (isDragging ? 316 : 0);
@@ -361,7 +293,6 @@ export default function Kanban() {
                             onUpdateTask={updateTask}
                             onStartTaskDrag={(e, task, el) => startDrag(e, task, el, 'task')}
                             onStartListDrag={(e, list, el) => {
-                                // Cache active container boundary refs cleanly into the pointer tracking matrix
                                 registerListElement(list.id, el);
                                 startDrag(e, list, el, 'list');
                             }}

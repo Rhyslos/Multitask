@@ -1,7 +1,8 @@
-// page component
+// imports
 import { useNavigate } from 'react-router-dom';
 import { appName } from '../App';
 
+// page component
 export default function PrivacyPolicy() {
     const navigate = useNavigate();
 

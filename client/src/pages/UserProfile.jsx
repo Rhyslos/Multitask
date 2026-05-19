@@ -1,3 +1,4 @@
+// imports
 import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import 'flag-icons/css/flag-icons.min.css';
@@ -103,7 +104,7 @@ function PrivacySelector({ value, onChange }) {
     );
 }
 
-// user functions
+// page component
 export default function UserProfile() {
     const { user, updateUser } = useAuth();
 
@@ -135,8 +136,6 @@ export default function UserProfile() {
     const [profileMessage, setProfileMessage] = useState({ type: '', text: '' });
     const [passwordMessage, setPasswordMessage] = useState({ type: '', text: '' });
 
-    // Surfaced as the field's own error line so users see it next to the
-    // input, not just in the bottom message. Cleared on edit or successful save.
     const [displayNameError, setDisplayNameError] = useState('');
 
     // effect handler functions

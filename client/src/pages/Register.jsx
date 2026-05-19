@@ -1,4 +1,4 @@
-// user functions
+// imports
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
@@ -8,6 +8,7 @@ import CountrySelect from '../components/international/CountrySelect';
 const DISPLAY_NAME_MIN = 2;
 const DISPLAY_NAME_MAX = 32;
 
+// page component
 export default function Register() {
     const { register } = useAuth();
     const navigate = useNavigate();
@@ -25,9 +26,6 @@ export default function Register() {
         e.preventDefault();
         setError('');
 
-        // Display name is required everywhere it's shown (profile, live cursors,
-        // etc.) so we enforce the same 2–32 char rule at signup. Trim before
-        // measuring so "   a   " doesn't sneak through as length 7.
         const trimmedName = displayName.trim();
         if (!trimmedName) {
             return setError('Please choose a display name.');

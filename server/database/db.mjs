@@ -1,13 +1,8 @@
+// imports
 import sqlite3 from 'sqlite3';
 import { open } from 'sqlite';
 
-// All updatedAt / createdAt columns use millisecond-precision timestamps so the
-// sync engine's "WHERE updatedAt > ?" filter never collides on the same second.
-// SQLite has no native MS-precision DATETIME; we get it via STRFTIME('%f', 'now')
-// which produces e.g. '2026-04-28 14:32:11.847'.
-//
-// Anywhere in the codebase that previously used CURRENT_TIMESTAMP (in DEFAULT clauses
-// or in UPDATE ... SET updatedAt = CURRENT_TIMESTAMP), switch to this same expression.
+// constants
 const TS_DEFAULT = `(STRFTIME('%Y-%m-%d %H:%M:%f', 'now'))`;
 
 // database initialization functions

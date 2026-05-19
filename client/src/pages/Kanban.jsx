@@ -331,7 +331,7 @@ export default function Kanban() {
                         top: 0,
                         width: cloneMeta.width,
                         pointerEvents: "none",
-                        zIndex: 1000,
+                        zIndex: 1002,
                         willChange: "transform",
                     }}
                 >

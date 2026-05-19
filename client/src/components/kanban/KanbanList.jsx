@@ -1,8 +1,14 @@
 // initialization functions
 import { useEffect, useRef } from 'react';
 import KanbanTask from './KanbanTask';
+import AnimatedRemoval from '../AnimatedRemoval';
 
 // class functions
+//
+// The list ✕ button is gone — deletion is exclusively drag-to-delete now.
+// AnimatedRemoval wraps both each individual task and the list itself, so
+// the fade-then-mutate sequence works the same way for both. The `removing`
+// predicate is passed in from the page level (Kanban.jsx) via useAnimatedRemoval.
 export default function KanbanList({
     list,
     tasks,
@@ -11,11 +17,11 @@ export default function KanbanList({
     dragging,
     insertionPoint,
     isDraggingList,
+    isTaskRemoving,
+    isListRemoving,
     onUpdate,
-    onDelete,
     onAddTask,
     onUpdateTask,
-    onDeleteTask,
     onStartTaskDrag,
     onStartListDrag,
     onOpenTask,
@@ -84,69 +90,70 @@ export default function KanbanList({
         : null;
 
     return (
-        <div
-            className={`kanban-list ${isDraggingList ? 'is-dragging-list' : ''}`}
-            ref={listRef}
-        >
-            <div className="kanban-list-header" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div
-                    className="kanban-list-drag-handle"
-                    onMouseDown={e => onStartListDrag(e, list, listRef.current)}
-                    style={{ cursor: 'grab', color: '#aaa', padding: '0 2px', fontSize: '14px', userSelect: 'none' }}
-                    title="Drag to move list"
-                >
-                    ⋮⋮
+        <AnimatedRemoval removing={isListRemoving?.(list.id) ?? false}>
+            <div
+                className={`kanban-list ${isDraggingList ? 'is-dragging-list' : ''}`}
+                ref={listRef}
+            >
+                <div className="kanban-list-header" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div
+                        className="kanban-list-drag-handle"
+                        onMouseDown={e => onStartListDrag(e, list, listRef.current)}
+                        style={{ cursor: 'grab', color: '#aaa', padding: '0 2px', fontSize: '14px', userSelect: 'none' }}
+                        title="Drag to move list"
+                    >
+                        ⋮⋮
+                    </div>
+
+                    {categoryData && (
+                        <span
+                            className="kanban-list-category-dot"
+                            style={{ background: categoryData.color, flexShrink: 0 }}
+                        />
+                    )}
+
+                    <span
+                        ref={nameRef}
+                        className="kanban-list-name"
+                        contentEditable
+                        suppressContentEditableWarning
+                        onBlur={handleNameBlur}
+                        onKeyDown={handleNameKeyDown}
+                        style={{ flex: 1, minWidth: 0, outline: 'none' }}
+                    >
+                        {list.name}
+                    </span>
                 </div>
 
-                {categoryData && (
-                    <span
-                        className="kanban-list-category-dot"
-                        style={{ background: categoryData.color, flexShrink: 0 }}
-                    />
-                )}
+                <div className="kanban-task-container">
+                    {sortedTasks.map((task, index) => (
+                        <div key={task.id}>
+                            {taskInsertionIndex === index && (
+                                <div className="kanban-insertion-indicator" />
+                            )}
+                            <AnimatedRemoval removing={isTaskRemoving?.(task.id) ?? false}>
+                                <KanbanTask
+                                    task={task}
+                                    categories={categories}
+                                    isDragging={dragging === task.id}
+                                    onUpdate={changes => onUpdateTask(task.id, changes)}
+                                    onStartDrag={onStartTaskDrag}
+                                    onOpen={() => onOpenTask(task)}
+                                    registerTask={registerTask}
+                                    registerElement={registerTaskElement}
+                                />
+                            </AnimatedRemoval>
+                        </div>
+                    ))}
+                    {taskInsertionIndex === sortedTasks.length && (
+                        <div className="kanban-insertion-indicator" />
+                    )}
+                </div>
 
-                <span
-                    ref={nameRef}
-                    className="kanban-list-name"
-                    contentEditable
-                    suppressContentEditableWarning
-                    onBlur={handleNameBlur}
-                    onKeyDown={handleNameKeyDown}
-                    style={{ flex: 1, minWidth: 0, outline: 'none' }}
-                >
-                    {list.name}
-                </span>
-
-                <button className="kanban-list-delete" onClick={onDelete} style={{ flexShrink: 0 }}>✕</button>
+                <button className="kanban-add-task-btn" onClick={onAddTask}>
+                    + Add task
+                </button>
             </div>
-
-            <div className="kanban-task-container">
-                {sortedTasks.map((task, index) => (
-                    <div key={task.id}>
-                        {taskInsertionIndex === index && (
-                            <div className="kanban-insertion-indicator" />
-                        )}
-                        <KanbanTask
-                            task={task}
-                            categories={categories}
-                            isDragging={dragging === task.id}
-                            onUpdate={changes => onUpdateTask(task.id, changes)}
-                            onDelete={() => onDeleteTask(task.id)}
-                            onStartDrag={onStartTaskDrag}
-                            onOpen={() => onOpenTask(task)}
-                            registerTask={registerTask}
-                            registerElement={registerTaskElement}
-                        />
-                    </div>
-                ))}
-                {taskInsertionIndex === sortedTasks.length && (
-                    <div className="kanban-insertion-indicator" />
-                )}
-            </div>
-
-            <button className="kanban-add-task-btn" onClick={onAddTask}>
-                + Add task
-            </button>
-        </div>
+        </AnimatedRemoval>
     );
 }

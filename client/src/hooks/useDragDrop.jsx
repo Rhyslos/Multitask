@@ -8,15 +8,31 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 // Accepts `columns` so colIndex/columnID lookups can be done against React
 // state rather than the DOM — the old version parsed `--col` off an inline
 // style, which silently returned 0 if the DOM shape ever changed.
-export function useDragDrop({ tasks, lists, columns, onReorderTasks, onReorderLists, onGhostDrop }) {
+//
+// `onDeleteDrop` and the delete-zone ref-registrar wire in the drag-to-delete
+// dropzone. The delete zone has PRIORITY over insertion points and ghost
+// zones: at the bottom of the viewport the cursor is almost always also over
+// a valid list/column, so we suppress the blue insertion indicator while the
+// cursor is over the delete bar and short-circuit the reorder commit on mouseup.
+export function useDragDrop({
+    tasks,
+    lists,
+    columns,
+    onReorderTasks,
+    onReorderLists,
+    onGhostDrop,
+    onDeleteDrop,
+}) {
     const [dragging, setDragging] = useState(null);
     const [dragType, setDragType] = useState(null);
     const [cloneMeta, setCloneMeta] = useState(null);
     const [insertionPoint, setInsertionPoint] = useState(null);
+    const [isOverDeleteZone, setIsOverDeleteZone] = useState(false);
 
     const listRefs = useRef({});
     const taskRefs = useRef({});
     const ghostRefs = useRef({});
+    const deleteZoneRef = useRef(null);
     const dragOffset = useRef({ x: 0, y: 0 });
     const draggingRef = useRef(null);
     const tasksRef = useRef(tasks);
@@ -33,11 +49,13 @@ export function useDragDrop({ tasks, lists, columns, onReorderTasks, onReorderLi
     const onGhostDropRef = useRef(onGhostDrop);
     const onReorderTasksRef = useRef(onReorderTasks);
     const onReorderListsRef = useRef(onReorderLists);
+    const onDeleteDropRef = useRef(onDeleteDrop);
 
     // event functions
     useEffect(() => { onGhostDropRef.current = onGhostDrop; }, [onGhostDrop]);
     useEffect(() => { onReorderTasksRef.current = onReorderTasks; }, [onReorderTasks]);
     useEffect(() => { onReorderListsRef.current = onReorderLists; }, [onReorderLists]);
+    useEffect(() => { onDeleteDropRef.current = onDeleteDrop; }, [onDeleteDrop]);
     useEffect(() => { tasksRef.current = tasks; }, [tasks]);
     useEffect(() => { if (lists) listsRef.current = lists; }, [lists]);
     useEffect(() => { if (columns) columnsRef.current = columns; }, [columns]);
@@ -57,8 +75,20 @@ export function useDragDrop({ tasks, lists, columns, onReorderTasks, onReorderLi
         else delete ghostRefs.current[key];
     }
 
+    function registerDeleteZone(el) { deleteZoneRef.current = el; }
     function registerCloneOuter(el) { cloneOuterRef.current = el; }
     function registerCloneInner(el) { cloneInnerRef.current = el; }
+
+    // Shared hit-test for the delete zone. Read from getBoundingClientRect
+    // rather than relying on pointer events on the element itself — the
+    // dropzone sets pointerEvents: 'none' so it can't eat clicks underneath
+    // when no drag is active.
+    function isPointOverDeleteZone(cx, cy) {
+        const el = deleteZoneRef.current;
+        if (!el) return false;
+        const r = el.getBoundingClientRect();
+        return cx >= r.left && cx <= r.right && cy >= r.top && cy <= r.bottom;
+    }
 
     const onMouseMove = useCallback((e) => {
         if (!draggingRef.current) return;
@@ -83,6 +113,17 @@ export function useDragDrop({ tasks, lists, columns, onReorderTasks, onReorderLi
             }
         });
 
+        // Delete zone wins over insertion points. If the cursor is over the
+        // delete bar, clear the insertion indicator so the blue line doesn't
+        // flicker underneath the red dropzone.
+        const overDelete = isPointOverDeleteZone(e.clientX, e.clientY);
+        setIsOverDeleteZone(prev => prev === overDelete ? prev : overDelete);
+
+        if (overDelete) {
+            setInsertionPoint(prev => prev ? null : prev);
+            return;
+        }
+
         // Evaluate drop location dynamically based on payload type
         const point = draggingRef.current.type === 'list'
             ? getListInsertionPoint(e.clientX, e.clientY, draggingRef.current.item.id)
@@ -103,25 +144,36 @@ export function useDragDrop({ tasks, lists, columns, onReorderTasks, onReorderLi
 
         if (rafRef.current) cancelAnimationFrame(rafRef.current);
 
-        const isListDrag = draggingRef.current.type === 'list';
-        const point = isListDrag
-            ? getListInsertionPoint(e.clientX, e.clientY, draggingRef.current.item.id)
-            : getTaskInsertionPoint(e.clientX, e.clientY, draggingRef.current.item.id);
-
-        if (point) {
-            // Explicitly commit calculated array indices back to the parent sync manager
-            if (isListDrag) commitListReorder(draggingRef.current.item, point);
-            else commitTaskReorder(draggingRef.current.item, point);
+        // Delete zone short-circuits everything. The parent's onDeleteDrop
+        // owns the mutation (and the fade animation via useAnimatedRemoval).
+        // No reorder commit, no ghost fallback — releasing over the delete
+        // bar means destroy, full stop.
+        if (isPointOverDeleteZone(e.clientX, e.clientY)) {
+            onDeleteDropRef.current?.(
+                draggingRef.current.item,
+                draggingRef.current.type
+            );
         } else {
-            // Fallback evaluates direct drops onto ghost zones (spawning empty columns/lists)
-            for (const [key, el] of Object.entries(ghostRefs.current)) {
-                const rect = el.getBoundingClientRect();
-                if (
-                    e.clientX >= rect.left && e.clientX <= rect.right &&
-                    e.clientY >= rect.top && e.clientY <= rect.bottom
-                ) {
-                    onGhostDropRef.current?.(key, draggingRef.current.item);
-                    break;
+            const isListDrag = draggingRef.current.type === 'list';
+            const point = isListDrag
+                ? getListInsertionPoint(e.clientX, e.clientY, draggingRef.current.item.id)
+                : getTaskInsertionPoint(e.clientX, e.clientY, draggingRef.current.item.id);
+
+            if (point) {
+                // Explicitly commit calculated array indices back to the parent sync manager
+                if (isListDrag) commitListReorder(draggingRef.current.item, point);
+                else commitTaskReorder(draggingRef.current.item, point);
+            } else {
+                // Fallback evaluates direct drops onto ghost zones (spawning empty columns/lists)
+                for (const [key, el] of Object.entries(ghostRefs.current)) {
+                    const rect = el.getBoundingClientRect();
+                    if (
+                        e.clientX >= rect.left && e.clientX <= rect.right &&
+                        e.clientY >= rect.top && e.clientY <= rect.bottom
+                    ) {
+                        onGhostDropRef.current?.(key, draggingRef.current.item);
+                        break;
+                    }
                 }
             }
         }
@@ -131,6 +183,7 @@ export function useDragDrop({ tasks, lists, columns, onReorderTasks, onReorderLi
         setDragType(null);
         setCloneMeta(null);
         setInsertionPoint(null);
+        setIsOverDeleteZone(false);
         tiltRef.current = 0;
         targetTiltRef.current = 0;
 
@@ -312,9 +365,11 @@ export function useDragDrop({ tasks, lists, columns, onReorderTasks, onReorderLi
         dragType,
         cloneMeta,
         insertionPoint,
+        isOverDeleteZone,
         registerList,
         registerTask,
         registerGhost,
+        registerDeleteZone,
         registerCloneOuter,
         registerCloneInner,
         startDrag,

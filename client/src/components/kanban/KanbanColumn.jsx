@@ -12,11 +12,11 @@ export default function KanbanColumn({
     dragType,
     insertionPoint,
     isDraggingTaskToEmptyCol,
+    isTaskRemoving,
+    isListRemoving,
     onAddTask,
     onUpdateList,
-    onDeleteList,
     onUpdateTask,
-    onDeleteTask,
     onStartTaskDrag,
     onStartListDrag,
     onOpenTask,
@@ -50,11 +50,11 @@ export default function KanbanColumn({
                         dragging={dragType === 'task' ? dragging : null}
                         isDraggingList={dragType === 'list' && dragging === list.id}
                         insertionPoint={insertionPoint}
+                        isTaskRemoving={isTaskRemoving}
+                        isListRemoving={isListRemoving}
                         onUpdate={changes => onUpdateList(list.id, changes)}
-                        onDelete={() => onDeleteList(list.id)}
                         onAddTask={() => onAddTask(list.id)}
                         onUpdateTask={onUpdateTask}
-                        onDeleteTask={onDeleteTask}
                         onStartTaskDrag={onStartTaskDrag}
                         onStartListDrag={onStartListDrag}
                         onOpenTask={onOpenTask}

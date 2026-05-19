@@ -2,13 +2,17 @@ import { useState, useRef, useEffect } from 'react';
 import CategoryDropdown from './CategoryDropdown';
 
 // ui components
+//
+// The onDelete prop is gone — tasks are deleted exclusively by dragging them
+// to the delete dropzone, which routes through useAnimatedRemoval and
+// useTasks.deleteTask at the page level. KanbanTask itself never invokes a
+// delete, so the prop was dead weight.
 export default function KanbanTask({
     task,
     categories,
     isDragging,
     isClone,
     onUpdate,
-    onDelete,
     onStartDrag,
     onOpen,
     registerTask,

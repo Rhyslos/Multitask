@@ -8,12 +8,14 @@ import { useWorkspaces } from "../hooks/useWorkspaces";
 import { useAuth } from "../hooks/useAuth";
 import { useDragDrop } from "../hooks/useDragDrop";
 import { useFlipAnimation } from "../hooks/useFlipAnimation";
+import { useAnimatedRemoval } from "../hooks/useAnimatedRemoval";
 import { useSync } from "../hooks/useSync";
 import { SyncManager } from "../sync/syncManager";
 import KanbanSubbar from "../components/subbar/KanbanSubbar";
 import KanbanColumn from "../components/kanban/KanbanColumn";
 import KanbanTask from "../components/kanban/KanbanTask";
 import TaskModal from "../components/kanban/TaskModal";
+import DeleteDropZone from "../components/kanban/DeleteDropZone";
 
 // Page
 export default function Kanban() {
@@ -172,6 +174,25 @@ export default function Kanban() {
         await sm.runBatch(statements);
     }
 
+    async function handleDeleteList(listID) {
+        await deleteListAndPruneAtomic(listID);
+    }
+
+    // ---------- Drag-to-delete animation wiring ----------
+    //
+    // useAnimatedRemoval fades the node, THEN fires the mutation. Two separate
+    // instances so tasks and lists each track their own removingIds set —
+    // mixing them would mean a list-delete could un-fade a task that happened
+    // to share an id prefix (vanishingly unlikely, but the cost of separating
+    // is one extra hook).
+    //
+    // For lists we route through handleDeleteList, not deleteList directly,
+    // so the atomic column-prune still runs after the fade completes.
+    const { triggerRemoval: triggerTaskRemoval, isRemoving: isTaskRemoving } =
+        useAnimatedRemoval(deleteTask);
+    const { triggerRemoval: triggerListRemoval, isRemoving: isListRemoving } =
+        useAnimatedRemoval(handleDeleteList);
+
     // --- Drag and drop ---
     // `columns` is passed in so useDragDrop can resolve columnIndex from state
     // rather than parsing inline CSS variables off the DOM.
@@ -180,9 +201,11 @@ export default function Kanban() {
         dragType,
         cloneMeta,
         insertionPoint,
+        isOverDeleteZone,
         registerList,
         registerTask,
         registerGhost,
+        registerDeleteZone,
         registerCloneOuter,
         registerCloneInner,
         startDrag,
@@ -195,6 +218,13 @@ export default function Kanban() {
         // column (if it was the rightmost and is now empty) is auto-cleaned
         // in the same batch — no flicker.
         onReorderLists: reorderListsAndPruneAtomic,
+        onDeleteDrop: (item, type) => {
+            // Fade first, then mutate. useAnimatedRemoval delays the actual
+            // delete call by `duration` ms; during the fade the node is still
+            // in the DOM but at opacity 0 and pointer-events: none.
+            if (type === 'task') triggerTaskRemoval(item.id);
+            else if (type === 'list') triggerListRemoval(item.id);
+        },
         onGhostDrop: async (key, item) => {
             // If dragging a list container directly onto a ghost column marker,
             // avoid standard task mappings.
@@ -264,13 +294,6 @@ export default function Kanban() {
         if (listID) setFocusedListId(listID);
     }
 
-    // When a list is deleted, atomically prune the parent column if it was
-    // the rightmost and is now empty. The list delete, its task-cascade, and
-    // the optional column delete all land in one batch — no flicker.
-    async function handleDeleteList(listID) {
-        await deleteListAndPruneAtomic(listID);
-    }
-
     const tasksByListID = useMemo(() => {
         const map = {};
         for (const task of tasks) {
@@ -327,14 +350,14 @@ export default function Kanban() {
                             dragType={dragType}
                             insertionPoint={insertionPoint}
                             isDraggingTaskToEmptyCol={isDragging && dragType === 'task'}
+                            isTaskRemoving={isTaskRemoving}
+                            isListRemoving={isListRemoving}
                             onAddTask={(listID) => {
                                 const list = lists.find(l => l.id === listID);
                                 addTask(listID, list?.category, list?.color);
                             }}
                             onUpdateList={updateList}
-                            onDeleteList={handleDeleteList}
                             onUpdateTask={updateTask}
-                            onDeleteTask={deleteTask}
                             onStartTaskDrag={(e, task, el) => startDrag(e, task, el, 'task')}
                             onStartListDrag={(e, list, el) => {
                                 // Cache active container boundary refs cleanly into the pointer tracking matrix
@@ -387,7 +410,6 @@ export default function Kanban() {
                                 categories={categories}
                                 isClone={true}
                                 onUpdate={() => {}}
-                                onDelete={() => {}}
                                 onStartDrag={() => {}}
                                 onOpen={() => {}}
                             />
@@ -404,6 +426,12 @@ export default function Kanban() {
                     </div>
                 </div>
             )}
+
+            <DeleteDropZone
+                visible={isDragging}
+                isOver={isOverDeleteZone}
+                registerDeleteZone={registerDeleteZone}
+            />
 
             {activeTask && (
                 <TaskModal

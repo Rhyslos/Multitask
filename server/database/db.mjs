@@ -28,6 +28,7 @@ export async function initializeDatabase() {
         jobTitle TEXT,
         gender TEXT,
         skillset TEXT,
+        cursorColor TEXT,
         privacySettings TEXT DEFAULT '{}',
         createdAt DATETIME DEFAULT ${TS_DEFAULT},
         updatedAt DATETIME DEFAULT ${TS_DEFAULT},
@@ -176,5 +177,25 @@ export async function initializeDatabase() {
     CREATE INDEX IF NOT EXISTS idx_notation_pages_group ON notation_pages(groupID);
     `);
 
+    await runMigrations(db);
+
     return db;
+}
+
+// Migrations for databases created before a column was added. CREATE TABLE
+// IF NOT EXISTS never alters an existing table, so any column added to the
+// schema above must also be patched in here for already-existing DB files.
+// Each step is guarded — checks whether the column exists first — so this is
+// safe to run on every startup.
+async function runMigrations(db) {
+    await addColumnIfMissing(db, 'users', 'cursorColor', 'TEXT');
+}
+
+async function addColumnIfMissing(db, table, column, type) {
+    const cols = await db.all(`PRAGMA table_info(${table})`);
+    const exists = cols.some(c => c.name === column);
+    if (!exists) {
+        await db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+        console.log(`[db] migration: added ${table}.${column}`);
+    }
 }

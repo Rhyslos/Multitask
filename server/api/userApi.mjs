@@ -37,6 +37,15 @@ function validateDisplayName(raw) {
     return null;
 }
 
+// Accepts a #rrggbb hex string; returns it lowercased, or null for anything
+// invalid/empty. null means "no custom color" — clients fall back to a
+// default. Guards the CSS layer against malformed values from the client.
+function normalizeHexColor(raw) {
+    if (typeof raw !== 'string') return null;
+    const trimmed = raw.trim().toLowerCase();
+    return /^#[0-9a-f]{6}$/.test(trimmed) ? trimmed : null;
+}
+
 // routes
 export default function createUserRouter(db) {
     const router = Router();
@@ -111,7 +120,8 @@ export default function createUserRouter(db) {
                 lastName: user.lastName,
                 countryIso: user.countryIso,
                 phoneNumber: user.phoneNumber,
-                privacySettings: user.privacySettings
+                privacySettings: user.privacySettings,
+                cursorColor: user.cursorColor
             }
         });
     }));
@@ -119,7 +129,7 @@ export default function createUserRouter(db) {
     // user profile functions
     router.get('/:id/profile', catchAsync(async (req, res) => {
         const user = await db.get(
-            'SELECT id, email, displayName, firstName, lastName, countryIso, phoneNumber, privacySettings FROM users WHERE id = ?',
+            'SELECT id, email, displayName, firstName, lastName, countryIso, phoneNumber, privacySettings, cursorColor FROM users WHERE id = ?',
             req.params.id
         );
 
@@ -132,7 +142,7 @@ export default function createUserRouter(db) {
 
     // profile update route
     router.patch('/:id/profile', catchAsync(async (req, res) => {
-        const { displayName, firstName, lastName, email, countryIso, phoneNumber, privacySettings } = req.body;
+        const { displayName, firstName, lastName, email, countryIso, phoneNumber, privacySettings, cursorColor } = req.body;
 
         const nameError = validateDisplayName(displayName);
         if (nameError) return res.status(400).json({ error: nameError });
@@ -147,12 +157,16 @@ export default function createUserRouter(db) {
         );
         if (existingName) return res.status(409).json({ error: 'Display name already taken.' });
 
+        // cursorColor: accept a #rrggbb hex string or null (reset to default).
+        // Reject anything else so a malformed value can't reach the CSS layer.
+        const cleanColor = normalizeHexColor(cursorColor);
+
         await db.run(
-            'UPDATE users SET displayName = ?, firstName = ?, lastName = ?, email = ?, countryIso = ?, phoneNumber = ?, privacySettings = ?, updatedAt = ? WHERE id = ?',
-            trimmedName, firstName || null, lastName || null, email, countryIso || null, phoneNumber || null, privacySettings || '{}', nowIso(), req.params.id
+            'UPDATE users SET displayName = ?, firstName = ?, lastName = ?, email = ?, countryIso = ?, phoneNumber = ?, privacySettings = ?, cursorColor = ?, updatedAt = ? WHERE id = ?',
+            trimmedName, firstName || null, lastName || null, email, countryIso || null, phoneNumber || null, privacySettings || '{}', cleanColor, nowIso(), req.params.id
         );
 
-        const user = await db.get('SELECT id, email, displayName, firstName, lastName, countryIso, phoneNumber, privacySettings FROM users WHERE id = ?', req.params.id);
+        const user = await db.get('SELECT id, email, displayName, firstName, lastName, countryIso, phoneNumber, privacySettings, cursorColor FROM users WHERE id = ?', req.params.id);
         return res.json({ user });
     }));
 

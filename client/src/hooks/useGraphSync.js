@@ -49,7 +49,10 @@ export default function useGraphSync(workspaceID, user) {
 
         const idb = new IndexeddbPersistence(`graph:${workspaceID}`, doc);
 
-        const ws = new WebsocketProvider(WS_BASE, workspaceID, doc, {
+        // Room name is prefixed so the shared WS server can distinguish
+        // graph traffic from notation traffic. The server rejects any
+        // unprefixed room, so this prefix is required, not cosmetic.
+        const ws = new WebsocketProvider(WS_BASE, `graph/${workspaceID}`, doc, {
             params: {
                 userId: user.id,
                 email: user.email,
@@ -72,7 +75,7 @@ export default function useGraphSync(workspaceID, user) {
         ws.awareness.setLocalStateField('user', {
             displayName: user.displayName || user.email,
             email: user.email,
-            color: pickColor(user.id),
+            color: user.cursorColor || pickColor(user.id),
         });
 
         setProvider(ws);
@@ -86,12 +89,17 @@ export default function useGraphSync(workspaceID, user) {
             setProvider(null);
             setConnected(false);
         };
-    }, [doc, workspaceID, user?.id, user?.email, user?.displayName]);
+        // NOTE: displayName is deliberately NOT a dependency. The connection
+        // does not depend on it — only awareness does, and the effect below
+        // patches awareness in place when displayName changes. Including it
+        // here would tear down and rebuild the whole WebSocket on every
+        // display-name change (and on any user-object churn), causing a
+        // reconnect loop.
+    }, [doc, workspaceID, user?.id, user?.email]);
 
-    // If the user changes their displayName mid-session (UserProfile save),
-    // patch the awareness state in place so peers see the new label without
-    // tearing down and rebuilding the WS connection. Same idea as the email
-    // re-emit in useAuth.updateUser — change is reflected live.
+    // If the user changes their displayName or cursor color mid-session
+    // (UserProfile save), patch the awareness state in place so peers see the
+    // change without tearing down and rebuilding the WS connection.
     useEffect(() => {
         if (!provider || !user?.id) return;
         const current = provider.awareness.getLocalState();
@@ -100,8 +108,9 @@ export default function useGraphSync(workspaceID, user) {
             ...current.user,
             displayName: user.displayName || user.email,
             email: user.email,
+            color: user.cursorColor || pickColor(user.id),
         });
-    }, [provider, user?.displayName, user?.email]);
+    }, [provider, user?.displayName, user?.email, user?.cursorColor, user?.id]);
 
     // Separate effect for doc destruction so it runs on workspaceID change
     // even when user is unchanged.

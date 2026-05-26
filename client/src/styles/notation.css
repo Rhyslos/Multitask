@@ -737,8 +737,6 @@
     color: white;
     user-select: none;
     pointer-events: none;
-    opacity: 0;
-    transition: opacity 0.15s;
 }
 
 .collab-cursor:hover .collab-cursor__label {

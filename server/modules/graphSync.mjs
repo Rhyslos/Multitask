@@ -7,6 +7,10 @@ import { URL as NodeURL } from 'url';
 const SAVE_DEBOUNCE_MS = 1000;
 
 // database schema
+//
+// Two doc tables, one per feature. Graph docs are keyed by workspaceID
+// (one graph per workspace); notation docs are keyed by pageID (many pages
+// per workspace). Both store a Yjs document as a binary update blob.
 const GRAPH_DOCS_SCHEMA = `
     CREATE TABLE IF NOT EXISTS graph_docs (
         workspaceID TEXT PRIMARY KEY,
@@ -15,18 +19,43 @@ const GRAPH_DOCS_SCHEMA = `
     );
 `;
 
+const NOTATION_DOCS_SCHEMA = `
+    CREATE TABLE IF NOT EXISTS notation_docs (
+        pageID TEXT PRIMARY KEY,
+        ydocBinary BLOB NOT NULL,
+        updatedAt DATETIME NOT NULL,
+        FOREIGN KEY (pageID) REFERENCES notation_pages (id) ON DELETE CASCADE
+    );
+`;
+
 // state variables
 const saveTimers = new Map();
+
+// Per-feature persistence config. The room name carried by Yjs is prefixed
+// ("graph/<id>" or "notation/<id>"); routeDoc() parses that prefix and hands
+// back the matching entry so bindState/writeState know which table + key
+// column to use. Adding a third synced doc type later = one more entry here.
+const PERSISTENCE = {
+    graph:    { table: 'graph_docs',    keyCol: 'workspaceID' },
+    notation: { table: 'notation_docs', keyCol: 'pageID' },
+};
 
 // setup functions
 export async function attachGraphSync(wss, db) {
     await db.exec(GRAPH_DOCS_SCHEMA);
+    await db.exec(NOTATION_DOCS_SCHEMA);
 
+    // Single global persistence handler for every room y-websocket manages.
+    // It can't assume a doc is a graph doc anymore — it routes by prefix.
     setPersistence({
         bindState: async (docName, ydoc) => {
+            const route = routeDoc(docName);
+            if (!route) return; // unknown prefix: transport-only, no persistence
+
+            const { table, keyCol, id } = route;
             const row = await db.get(
-                'SELECT ydocBinary FROM graph_docs WHERE workspaceID = ?',
-                [docName]
+                `SELECT ydocBinary FROM ${table} WHERE ${keyCol} = ?`,
+                [id]
             );
             if (row?.ydocBinary) {
                 const bytes = row.ydocBinary instanceof Uint8Array
@@ -50,10 +79,31 @@ export async function attachGraphSync(wss, db) {
     wss.on('connection', async (conn, req) => {
         try {
             const identity = await authenticateUpgrade(req);
-            const workspaceID = parseRoomFromUrl(req.url);
+            const room = parseRoomFromUrl(req.url);
 
-            if (!workspaceID) {
-                conn.close(1008, 'Missing workspace ID');
+            if (!room) {
+                conn.close(1008, 'Missing room');
+                return;
+            }
+
+            // Resolve the room to the workspace whose membership governs
+            // access. Graph rooms ARE a workspace; notation rooms are a page
+            // that belongs to a workspace, so we look the parent up.
+            let workspaceID;
+            if (room.kind === 'graph') {
+                workspaceID = room.id;
+            } else if (room.kind === 'notation') {
+                const page = await db.get(
+                    'SELECT workspaceID FROM notation_pages WHERE id = ? AND isDeleted = 0',
+                    [room.id]
+                );
+                if (!page) {
+                    conn.close(1008, 'Unknown notation page');
+                    return;
+                }
+                workspaceID = page.workspaceID;
+            } else {
+                conn.close(1008, 'Unknown room type');
                 return;
             }
 
@@ -87,16 +137,20 @@ function scheduleSave(db, docName, ydoc) {
 }
 
 async function persistDoc(db, docName, ydoc) {
+    const route = routeDoc(docName);
+    if (!route) return; // unknown prefix: nothing to persist
+
+    const { table, keyCol, id } = route;
     const bytes = Y.encodeStateAsUpdate(ydoc);
     const now = new Date().toISOString().replace('T', ' ').replace('Z', '');
-    
+
     await db.run(
-        `INSERT INTO graph_docs (workspaceID, ydocBinary, updatedAt)
+        `INSERT INTO ${table} (${keyCol}, ydocBinary, updatedAt)
          VALUES (?, ?, ?)
-         ON CONFLICT(workspaceID) DO UPDATE SET
+         ON CONFLICT(${keyCol}) DO UPDATE SET
             ydocBinary = excluded.ydocBinary,
             updatedAt  = excluded.updatedAt`,
-        [docName, Buffer.from(bytes), now]
+        [id, Buffer.from(bytes), now]
     );
 }
 
@@ -113,10 +167,36 @@ async function authenticateUpgrade(req) {
 }
 
 // utility functions
+//
+// Room names are prefixed: "graph/<workspaceID>" or "notation/<pageID>".
+// Returns { kind, id } or null if the path is empty / unprefixed.
 function parseRoomFromUrl(rawUrl) {
     const url = new NodeURL(rawUrl, 'http://localhost');
     const pathname = url.pathname.replace(/^\/+/, '');
-    return pathname || null;
+    if (!pathname) return null;
+
+    const slash = pathname.indexOf('/');
+    if (slash === -1) return null; // unprefixed room — reject
+
+    const kind = pathname.slice(0, slash);
+    const id = pathname.slice(slash + 1);
+    if (!kind || !id) return null;
+
+    return { kind, id };
+}
+
+// Maps a Yjs docName ("graph/<id>" / "notation/<id>") to its persistence
+// target. Returns null for anything unrecognized so callers can no-op.
+function routeDoc(docName) {
+    const slash = docName.indexOf('/');
+    if (slash === -1) return null;
+
+    const kind = docName.slice(0, slash);
+    const id = docName.slice(slash + 1);
+    const cfg = PERSISTENCE[kind];
+    if (!cfg || !id) return null;
+
+    return { ...cfg, id };
 }
 
 // permission functions

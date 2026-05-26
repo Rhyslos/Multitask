@@ -6,6 +6,7 @@ import Collaboration from '@tiptap/extension-collaboration';
 import CollaborationCaret from '@tiptap/extension-collaboration-caret';
 import * as Y from 'yjs';
 import { WebsocketProvider } from 'y-websocket';
+import { IndexeddbPersistence } from 'y-indexeddb';
 
 import { useAuth } from '../hooks/useAuth';
 import { editorExtensions } from '../components/notation/EditorExtensions';
@@ -21,30 +22,55 @@ export default function Notation() {
     const [status, setStatus] = useState('connecting…');
     const [sidebarOpen, setSidebarOpen] = useState(true);
 
-    const { ydoc, provider } = useMemo(() => {
-        if (!activePageID) return { ydoc: null, provider: null };
+    // The doc/provider/local-cache are built together and keyed on both the
+    // page and the user: the WS server now requires userId + email, so we
+    // must not build the provider until the user is known. Selecting a page
+    // before auth resolves is not normally possible, but keying on user.id
+    // makes the dependency explicit and rebuilds cleanly if it ever changes.
+    const { ydoc, provider, idb } = useMemo(() => {
+        if (!activePageID || !user?.id || !user?.email) {
+            return { ydoc: null, provider: null, idb: null };
+        }
 
         const doc = new Y.Doc();
-        const wsProvider = new WebsocketProvider(
-            'ws://localhost:8080',
-            activePageID,
+
+        // Local-first cache. Edits made offline are written here and replayed
+        // to the server on reconnect; Yjs (CRDT) merges them with no conflict.
+        const idbPersistence = new IndexeddbPersistence(
+            `notation:${activePageID}`,
             doc
         );
-        return { ydoc: doc, provider: wsProvider };
-    }, [activePageID]);
+
+        // Room is prefixed so the shared WS server can tell notation from
+        // graph traffic. userId/email are required by the server's auth gate.
+        const wsProvider = new WebsocketProvider(
+            'ws://localhost:8080',
+            `notation/${activePageID}`,
+            doc,
+            {
+                params: {
+                    userId: user.id,
+                    email: user.email,
+                },
+            }
+        );
+
+        return { ydoc: doc, provider: wsProvider, idb: idbPersistence };
+    }, [activePageID, user?.id, user?.email]);
 
     useEffect(() => {
         if (!provider) return;
 
-        provider.on('status', event => {
-            setStatus(event.status);
-        });
+        const onStatus = event => setStatus(event.status);
+        provider.on('status', onStatus);
 
         return () => {
+            provider.off('status', onStatus);
             provider.destroy();
+            idb?.destroy();
             ydoc.destroy();
         };
-    }, [provider, ydoc]);
+    }, [provider, ydoc, idb]);
 
     const editor = useEditor({
         extensions: [
@@ -54,7 +80,7 @@ export default function Notation() {
                 CollaborationCaret.configure({
                     provider,
                     user: {
-                        name: user?.email || 'Anonymous',
+                        name: user?.displayName || user?.email || 'Anonymous',
                         color: '#c8502a'
                     },
                     render(user) {

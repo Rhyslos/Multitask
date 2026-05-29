@@ -16,7 +16,7 @@ export function useWorkspacePresence(workspaceID) {
         
         try {
             const results = await sm.query(`
-                SELECT u.id, u.email, u.displayName, u.firstName, u.lastName, u.countryIso, u.phoneNumber, u.gender, u.skillset, u.privacySettings, wm.role 
+                SELECT u.id, u.email, u.displayName, u.firstName, u.lastName, u.countryIso, u.phoneNumber, u.gender, u.skillset, u.privacySettings, u.cursorColor, wm.role 
                 FROM workspace_members wm
                 JOIN users u ON wm.userID = u.id
                 WHERE wm.workspaceID = ? AND wm.isDeleted = 0
@@ -40,11 +40,23 @@ export function useWorkspacePresence(workspaceID) {
 
         const updatePresence = async (wsID) => {
             try {
-                await fetch(`${API}/network/presence`, {
+                const res = await fetch(`${API}/network/presence`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ email: userEmail, workspaceID: wsID })
                 });
+                // Seed presence directly from the POST response. The SSE
+                // broadcast can arrive before this client's stream is
+                // connected (notably right after a refresh), so relying on
+                // the presence_updated event alone leaves members grey until
+                // the next change. Using the response makes join/refresh
+                // populate immediately.
+                if (res.ok && wsID) {
+                    const data = await res.json();
+                    if (Array.isArray(data.onlineEmails)) {
+                        setOnlineEmails(data.onlineEmails);
+                    }
+                }
             } catch (e) {
                 console.error('Presence ping failed:', e);
             }

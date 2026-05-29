@@ -81,7 +81,7 @@ export default function Notation() {
                     provider,
                     user: {
                         name: user?.displayName || user?.email || 'Anonymous',
-                        color: '#c8502a'
+                        color: user?.cursorColor || '#c8502a'
                     },
                     render(user) {
                         const cursor = document.createElement('span');

@@ -9,6 +9,66 @@ const API = 'http://localhost:8080/api';
 const DISPLAY_NAME_MIN = 2;
 const DISPLAY_NAME_MAX = 32;
 
+// Preset cursor colors — picked to stay readable as a cursor label (mid
+// saturation/lightness, visually distinct from each other). The custom
+// option lets users pick anything via the native color input.
+const CURSOR_SWATCHES = [
+    '#c8502a', '#2a7ac8', '#3a9d5d', '#9d3a8f',
+    '#d4a017', '#d23f3f', '#5a4fc8', '#1f9c9c',
+];
+const DEFAULT_CURSOR_COLOR = '#c8502a';
+
+// swatches + custom color picker
+function CursorColorPicker({ value, onChange }) {
+    const selected = value || DEFAULT_CURSOR_COLOR;
+    const isCustom = !CURSOR_SWATCHES.includes(selected);
+
+    return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            {CURSOR_SWATCHES.map(color => (
+                <button
+                    key={color}
+                    type="button"
+                    onClick={() => onChange(color)}
+                    aria-label={`Select color ${color}`}
+                    style={{
+                        width: '28px', height: '28px', borderRadius: '50%',
+                        background: color, cursor: 'pointer', padding: 0,
+                        border: selected === color
+                            ? '3px solid var(--ink, #222)'
+                            : '3px solid transparent',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                    }}
+                />
+            ))}
+
+            {/* Custom: native color input. The wrapper shows the selection ring. */}
+            <label
+                style={{
+                    width: '28px', height: '28px', borderRadius: '50%',
+                    cursor: 'pointer', position: 'relative', overflow: 'hidden',
+                    border: isCustom ? '3px solid var(--ink, #222)' : '3px solid transparent',
+                    background: isCustom
+                        ? selected
+                        : 'conic-gradient(red, yellow, lime, cyan, blue, magenta, red)',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                }}
+                title="Custom color"
+            >
+                <input
+                    type="color"
+                    value={selected}
+                    onChange={e => onChange(e.target.value.toLowerCase())}
+                    style={{
+                        opacity: 0, width: '100%', height: '100%',
+                        cursor: 'pointer', border: 'none',
+                    }}
+                />
+            </label>
+        </div>
+    );
+}
+
 // input helper functions
 function InternalCountrySelect({ value, onChange }) {
     const [isOpen, setIsOpen] = useState(false);
@@ -115,6 +175,7 @@ export default function UserProfile() {
     const [email, setEmail] = useState(user?.email || '');
     const [countryIso, setCountryIso] = useState(user?.countryIso || 'us');
     const [phoneNumber, setPhoneNumber] = useState(user?.phoneNumber || '');
+    const [cursorColor, setCursorColor] = useState(user?.cursorColor || DEFAULT_CURSOR_COLOR);
 
     const [privacySettings, setPrivacySettings] = useState(() => {
         try {
@@ -147,6 +208,7 @@ export default function UserProfile() {
             setEmail(user.email || '');
             setCountryIso(user.countryIso || 'us');
             setPhoneNumber(user.phoneNumber || '');
+            setCursorColor(user.cursorColor || DEFAULT_CURSOR_COLOR);
             try {
                 if (user.privacySettings) {
                     setPrivacySettings(typeof user.privacySettings === 'string'
@@ -212,6 +274,7 @@ export default function UserProfile() {
                     email,
                     countryIso,
                     phoneNumber,
+                    cursorColor,
                     privacySettings: JSON.stringify(privacySettings)
                 }),
             });
@@ -324,6 +387,14 @@ export default function UserProfile() {
                                         {displayNameError}
                                     </span>
                                 )}
+                            </div>
+
+                            <div className="profile-field">
+                                <label>Cursor &amp; Avatar Color</label>
+                                <span style={{ fontSize: '0.8rem', color: 'var(--muted)', marginTop: '4px', marginBottom: '8px' }}>
+                                    Used for your live cursor and your avatar on shared boards.
+                                </span>
+                                <CursorColorPicker value={cursorColor} onChange={setCursorColor} />
                             </div>
 
                             <div className="profile-field" style={{ marginBottom: '8px' }}>

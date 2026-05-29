@@ -6,13 +6,23 @@ const clients = new Map();
 const activeWorkspaces = new Map();
 
 // broadcast functions
-function broadcastPresence(workspaceID) {
-    if (!workspaceID) return;
-    
+//
+// Computes who is currently marked present in a workspace. Used both by the
+// SSE broadcast and by the /presence POST response — the POST returning this
+// directly is what lets a joining client learn the current state without
+// depending on SSE delivery timing.
+function getOnlineInWorkspace(workspaceID) {
     const onlineInWorkspace = [];
     activeWorkspaces.forEach((wsID, email) => {
         if (wsID === workspaceID) onlineInWorkspace.push(email);
     });
+    return onlineInWorkspace;
+}
+
+function broadcastPresence(workspaceID) {
+    if (!workspaceID) return;
+
+    const onlineInWorkspace = getOnlineInWorkspace(workspaceID);
 
     onlineInWorkspace.forEach(email => {
         notifyUser(email, 'presence_updated', { workspaceID, onlineEmails: onlineInWorkspace });
@@ -101,7 +111,15 @@ export default function createNetworkingRouter() {
             broadcastPresence(workspaceID);
         }
 
-        res.json({ success: true });
+        // Return the current online list directly. A client that just joined
+        // may not have an SSE stream connected yet (or is mid-reconnect after
+        // a refresh), so it could miss the broadcast above. Returning the
+        // state here lets useWorkspacePresence seed itself synchronously,
+        // independent of SSE timing.
+        res.json({
+            success: true,
+            onlineEmails: workspaceID ? getOnlineInWorkspace(workspaceID) : [],
+        });
     });
 
     return router;

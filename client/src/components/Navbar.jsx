@@ -16,8 +16,12 @@ function getAvatarLetter(member) {
 }
 
 function getAvatarColor(member) {
-    if (!member.isOnline) return '#4A4A4A'; 
-    
+    if (!member.isOnline) return '#4A4A4A';
+
+    // A user-picked color wins when set; otherwise derive a stable color
+    // by hashing the email so every user still gets a distinct avatar.
+    if (member.cursorColor) return member.cursorColor;
+
     let hash = 0;
     const str = member.email || member.id || 'default';
     for (let i = 0; i < str.length; i++) {
@@ -41,6 +45,7 @@ export default function Navbar() {
 
     const inWorkspace = !!workspaceID;
     const { members } = useWorkspacePresence(workspaceID);
+    console.log('[Navbar] render — workspaceID:', workspaceID, 'members:', members);
 
     function navTo(page) {
         if (workspaceID) navigate(`/workspace/${workspaceID}/${page}`);
@@ -101,7 +106,7 @@ export default function Navbar() {
                 )}
 
                 <div className="navbar-right" style={{ marginLeft: inWorkspace ? '0' : 'auto' }}>
-                    <span className="navbar-user">{user?.username}</span>
+                    <span className="navbar-user">{user?.displayName}</span>
                     <button className="navbar-hamburger" onClick={() => setMenuOpen(true)}>
                         <span /><span /><span />
                     </button>

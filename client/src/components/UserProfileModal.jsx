@@ -12,7 +12,8 @@ function getAvatarLetter(member) {
 }
 
 function getAvatarColor(member) {
-    if (!member.isOnline) return '#4A4A4A'; 
+    if (!member.isOnline) return '#4A4A4A';
+    if (member.cursorColor) return member.cursorColor;
     let hash = 0;
     const str = member.email || member.id || 'default';
     for (let i = 0; i < str.length; i++) {

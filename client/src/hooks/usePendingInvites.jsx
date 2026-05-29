@@ -54,9 +54,19 @@ export function usePendingInvites() {
             setInvites(prev => prev.filter(inv => inv.id !== inviteID));
 
             if (action === 'accept') {
-                // Pull the newly shared workspace from the server immediately.
-                // (Previously this called triggerSync, which has been replaced by
-                // pullFromServer for SSE-driven catch-up.)
+                // Accepting an invite grants access to a workspace whose rows
+                // (the workspace, the owner's membership, the owner's user
+                // record, existing tasks/notes/etc.) already exist on the
+                // server with OLD updatedAt timestamps — older than this
+                // client's sync watermark. An incremental pull asks only for
+                // updatedAt > watermark, so it would skip all of that data
+                // permanently, and the watermark would still advance past it.
+                //
+                // Reset the watermark so the next pull starts from epoch and
+                // performs a FULL pull, picking up the pre-existing workspace
+                // data. Without this, an invited user intermittently fails to
+                // see the host and other members.
+                if (user?.id) localStorage.removeItem(`sync_time_${user.id}`);
                 if (sm) await sm.pullFromServer();
                 window.dispatchEvent(new Event('workspacesUpdated'));
             }

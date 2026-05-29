@@ -4,7 +4,7 @@ import { WorkerClient } from './workerClient.js';
 const API = 'http://localhost:8080/api';
 
 const SCHEMA_SQL = `
-  CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, email TEXT NOT NULL, displayName TEXT, firstName TEXT, lastName TEXT, countryIso TEXT, phoneNumber TEXT, gender TEXT, skillset TEXT, privacySettings TEXT, updatedAt DATETIME NOT NULL, isDeleted INTEGER DEFAULT 0);
+  CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, email TEXT NOT NULL, displayName TEXT, firstName TEXT, lastName TEXT, countryIso TEXT, phoneNumber TEXT, gender TEXT, skillset TEXT, cursorColor TEXT, privacySettings TEXT, updatedAt DATETIME NOT NULL, isDeleted INTEGER DEFAULT 0);
   CREATE TABLE IF NOT EXISTS categories (id TEXT PRIMARY KEY, name TEXT NOT NULL, color TEXT NOT NULL, userID TEXT NOT NULL, updatedAt DATETIME NOT NULL, isDeleted INTEGER DEFAULT 0);
   CREATE TABLE IF NOT EXISTS workspaces (id TEXT PRIMARY KEY, name TEXT NOT NULL, userID TEXT NOT NULL, categoryID TEXT, createdAt DATETIME NOT NULL, updatedAt DATETIME NOT NULL, isDeleted INTEGER DEFAULT 0);
   CREATE TABLE IF NOT EXISTS workspace_members (id TEXT PRIMARY KEY, workspaceID TEXT NOT NULL, userID TEXT NOT NULL, role TEXT DEFAULT 'editor', joinedAt DATETIME, updatedAt DATETIME NOT NULL, isDeleted INTEGER DEFAULT 0);
@@ -23,6 +23,17 @@ const SCHEMA_SQL = `
 `;
 
 const SYNC_TABLES = ['users', 'categories', 'workspaces', 'workspace_members', 'kanban_tabs', 'kanban_columns', 'lists', 'tasks', 'notes', 'notation_groups', 'notation_pages'];
+
+// Migrations for local DBs created before a column was added. The local DB
+// persists across sessions (studyspace_<userId>_v2), so CREATE TABLE IF NOT
+// EXISTS never alters an already-existing table — any column added to
+// SCHEMA_SQL above must also be listed here. Each step is guarded (checks
+// PRAGMA table_info first) so it is safe to run on every startup.
+//
+// Must stay in sync with the server's runMigrations in db.mjs.
+const MIGRATIONS = [
+    { table: 'users', column: 'cursorColor', type: 'TEXT' },
+];
 
 const PUSH_DEBOUNCE_MS = 250;
 
@@ -112,6 +123,7 @@ export class SyncManager {
         try {
             await this._worker.init(`studyspace_${userId}_v2`);
             await this._worker.execute(SCHEMA_SQL);
+            await this._runMigrations();
 
             if (!this._listenersAttached) {
                 this._setupNetworkListeners();
@@ -125,6 +137,30 @@ export class SyncManager {
             if (email) this.connectStream(email);
         } catch (e) {
             console.error(e);
+        }
+    }
+
+    // Applies MIGRATIONS to the local DB. Uses the worker directly (not the
+    // public query/execute) because _dbReadyPromise has not resolved yet at
+    // this point, and we don't want a migration to trigger a sync push.
+    async _runMigrations() {
+        for (const { table, column, type } of MIGRATIONS) {
+            try {
+                const cols = await this._worker.query(`PRAGMA table_info(${table})`);
+                // PRAGMA rows are normally objects ({ name: 'colname', ... }).
+                // Guard against an array-row shape just in case the worker
+                // returns positional rows — column name is index 1 there.
+                const exists = Array.isArray(cols) && cols.some(c =>
+                    (c && c.name === column) ||
+                    (Array.isArray(c) && c[1] === column)
+                );
+                if (!exists) {
+                    await this._worker.execute(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+                    console.log(`[sync] migration: added ${table}.${column}`);
+                }
+            } catch (e) {
+                console.error(`[sync] migration failed for ${table}.${column}:`, e.message);
+            }
         }
     }
 

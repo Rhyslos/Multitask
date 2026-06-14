@@ -22,11 +22,6 @@ export default function Notation() {
     const [status, setStatus] = useState('connecting…');
     const [sidebarOpen, setSidebarOpen] = useState(true);
 
-    // The doc/provider/local-cache are built together and keyed on both the
-    // page and the user: the WS server now requires userId + email, so we
-    // must not build the provider until the user is known. Selecting a page
-    // before auth resolves is not normally possible, but keying on user.id
-    // makes the dependency explicit and rebuilds cleanly if it ever changes.
     const { ydoc, provider, idb } = useMemo(() => {
         if (!activePageID || !user?.id || !user?.email) {
             return { ydoc: null, provider: null, idb: null };
@@ -34,15 +29,11 @@ export default function Notation() {
 
         const doc = new Y.Doc();
 
-        // Local-first cache. Edits made offline are written here and replayed
-        // to the server on reconnect; Yjs (CRDT) merges them with no conflict.
         const idbPersistence = new IndexeddbPersistence(
             `notation:${activePageID}`,
             doc
         );
 
-        // Room is prefixed so the shared WS server can tell notation from
-        // graph traffic. userId/email are required by the server's auth gate.
         const wsProvider = new WebsocketProvider(
             'ws://localhost:8080',
             `notation/${activePageID}`,

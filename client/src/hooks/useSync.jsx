@@ -4,12 +4,6 @@ import { SyncManager } from '../sync/syncManager';
 // variables
 const SyncContext = createContext(null);
 
-// context provider
-//
-// Owns the React-shaped surface: context creation, online state for renders,
-// userEmail state for consumer hooks (e.g. useWorkspacePresence).
-// The SSE connection itself is owned by SyncManager — its lifecycle matches
-// the manager's, not any component's, so it doesn't belong here.
 export function SyncProvider({ children }) {
     const [sm, setSm] = useState(null);
     const [online, setOnline] = useState(navigator.onLine);

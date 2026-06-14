@@ -24,13 +24,6 @@ const SCHEMA_SQL = `
 
 const SYNC_TABLES = ['users', 'categories', 'workspaces', 'workspace_members', 'kanban_tabs', 'kanban_columns', 'lists', 'tasks', 'notes', 'notation_groups', 'notation_pages'];
 
-// Migrations for local DBs created before a column was added. The local DB
-// persists across sessions (studyspace_<userId>_v2), so CREATE TABLE IF NOT
-// EXISTS never alters an already-existing table — any column added to
-// SCHEMA_SQL above must also be listed here. Each step is guarded (checks
-// PRAGMA table_info first) so it is safe to run on every startup.
-//
-// Must stay in sync with the server's runMigrations in db.mjs.
 const MIGRATIONS = [
     { table: 'users', column: 'cursorColor', type: 'TEXT' },
 ];

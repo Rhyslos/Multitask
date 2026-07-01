@@ -84,6 +84,12 @@ export default function Navbar() {
                             >
                                 Notation
                             </button>
+                            <button
+                                className={`navbar-page-btn ${isActive('calendar') ? 'active' : ''}`}
+                                onClick={() => navTo('calendar')}
+                            >
+                                Calendar
+                            </button>
                         </div>
 
                         <div className="navbar-presence">

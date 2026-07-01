@@ -8,6 +8,7 @@ import Dashboard from './pages/Dashboard';
 import Kanban from './pages/Kanban';
 import Notation from './pages/Notation';
 import Graph from './pages/Graph';
+import Calendar from './pages/Calendar';
 import UserProfile from './pages/UserProfile';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import TermsOfService from './pages/TermsOfService';
@@ -42,6 +43,7 @@ function AppRoutes() {
                 <Route path="/workspace/:workspaceID/kanban"   element={<PrivateRoute><Kanban /></PrivateRoute>} />
                 <Route path="/workspace/:workspaceID/notation" element={<PrivateRoute><Notation /></PrivateRoute>} />
                 <Route path="/workspace/:workspaceID/graph"    element={<PrivateRoute><Graph /></PrivateRoute>} />
+                <Route path="/workspace/:workspaceID/calendar" element={<PrivateRoute><Calendar /></PrivateRoute>} />
                 
                 <Route path="*" element={<Navigate to={user ? '/dashboard' : '/login'} replace />} />
             </Routes>

@@ -168,6 +168,18 @@ export async function initializeDatabase() {
         FOREIGN KEY (workspaceID) REFERENCES workspaces (id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS availability (
+        id TEXT PRIMARY KEY,
+        userID TEXT NOT NULL,
+        workspaceID TEXT NOT NULL,
+        slot TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'available',
+        updatedAt DATETIME DEFAULT ${TS_DEFAULT},
+        isDeleted INTEGER DEFAULT 0,
+        FOREIGN KEY (userID) REFERENCES users (id) ON DELETE CASCADE,
+        FOREIGN KEY (workspaceID) REFERENCES workspaces (id) ON DELETE CASCADE
+    );
+
     CREATE INDEX IF NOT EXISTS idx_workspace_members_user_ws ON workspace_members(userID, workspaceID);
     CREATE INDEX IF NOT EXISTS idx_workspace_members_ws ON workspace_members(workspaceID);
     CREATE INDEX IF NOT EXISTS idx_tasks_list_order ON tasks(listID, taskOrder);
@@ -175,6 +187,8 @@ export async function initializeDatabase() {
     CREATE INDEX IF NOT EXISTS idx_columns_tab ON kanban_columns(workspaceID, tabID);
     CREATE INDEX IF NOT EXISTS idx_notation_pages_workspace ON notation_pages(workspaceID);
     CREATE INDEX IF NOT EXISTS idx_notation_pages_group ON notation_pages(groupID);
+    CREATE INDEX IF NOT EXISTS idx_availability_ws ON availability(workspaceID);
+    CREATE INDEX IF NOT EXISTS idx_availability_ws_user ON availability(workspaceID, userID);
     `);
 
     await runMigrations(db);

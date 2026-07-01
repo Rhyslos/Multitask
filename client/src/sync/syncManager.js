@@ -15,14 +15,17 @@ const SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS notes (id TEXT PRIMARY KEY, content TEXT NOT NULL DEFAULT '{}', workspaceID TEXT NOT NULL, updatedAt DATETIME NOT NULL, isDeleted INTEGER DEFAULT 0);
   CREATE TABLE IF NOT EXISTS notation_groups (id TEXT PRIMARY KEY, name TEXT NOT NULL, color TEXT, workspaceID TEXT NOT NULL, groupOrder INTEGER NOT NULL DEFAULT 0, updatedAt DATETIME NOT NULL, isDeleted INTEGER DEFAULT 0);
   CREATE TABLE IF NOT EXISTS notation_pages (id TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT 'Untitled', workspaceID TEXT NOT NULL, groupID TEXT, pageOrder INTEGER NOT NULL DEFAULT 0, updatedAt DATETIME NOT NULL, isDeleted INTEGER INTEGER DEFAULT 0);
+  CREATE TABLE IF NOT EXISTS availability (id TEXT PRIMARY KEY, userID TEXT NOT NULL, workspaceID TEXT NOT NULL, slot TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'available', updatedAt DATETIME NOT NULL, isDeleted INTEGER DEFAULT 0);
   CREATE INDEX IF NOT EXISTS idx_workspace_members_user_ws ON workspace_members(userID, workspaceID);
   CREATE INDEX IF NOT EXISTS idx_workspace_members_ws ON workspace_members(workspaceID);
   CREATE INDEX IF NOT EXISTS idx_tasks_list_order ON tasks(listID, taskOrder);
   CREATE INDEX IF NOT EXISTS idx_lists_column ON lists(columnID);
   CREATE INDEX IF NOT EXISTS idx_columns_tab ON kanban_columns(workspaceID, tabID);
+  CREATE INDEX IF NOT EXISTS idx_availability_ws ON availability(workspaceID);
+  CREATE INDEX IF NOT EXISTS idx_availability_ws_user ON availability(workspaceID, userID);
 `;
 
-const SYNC_TABLES = ['users', 'categories', 'workspaces', 'workspace_members', 'kanban_tabs', 'kanban_columns', 'lists', 'tasks', 'notes', 'notation_groups', 'notation_pages'];
+const SYNC_TABLES = ['users', 'categories', 'workspaces', 'workspace_members', 'kanban_tabs', 'kanban_columns', 'lists', 'tasks', 'notes', 'notation_groups', 'notation_pages', 'availability'];
 
 const MIGRATIONS = [
     { table: 'users', column: 'cursorColor', type: 'TEXT' },

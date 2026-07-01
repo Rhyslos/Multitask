@@ -83,7 +83,8 @@ export default function createSyncRouter(db) {
 // database functions
 const ALLOWED_TABLES = [
     'categories', 'workspaces', 'workspace_members', 'kanban_tabs', 
-    'kanban_columns', 'lists', 'tasks', 'notes', 'notation_groups', 'notation_pages'
+    'kanban_columns', 'lists', 'tasks', 'notes', 'notation_groups', 'notation_pages',
+    'availability'
 ];
 
 async function applyClientChanges(db, changes) {
@@ -188,6 +189,11 @@ async function getServerChanges(db, userID, lastSync) {
         wsParams
     );
 
+    const availability = await db.all(
+        `SELECT * FROM availability WHERE workspaceID IN (${wsQuery}) AND updatedAt > ?`,
+        wsParams
+    );
+
     const listQuery = `SELECT id FROM lists WHERE workspaceID IN (${wsQuery})`;
     const tasks = await db.all(
         `SELECT * FROM tasks WHERE listID IN (${listQuery}) AND updatedAt > ?`,
@@ -210,5 +216,5 @@ async function getServerChanges(db, userID, lastSync) {
         AND (u.updatedAt > ? OR wm.updatedAt > ?)
     `, [userID, userID, since, since]);
 
-    return { users, workspace_members, workspaces, categories, kanban_tabs, kanban_columns, lists, tasks, notes, notation_groups, notation_pages };
+    return { users, workspace_members, workspaces, categories, kanban_tabs, kanban_columns, lists, tasks, notes, notation_groups, notation_pages, availability };
 }
